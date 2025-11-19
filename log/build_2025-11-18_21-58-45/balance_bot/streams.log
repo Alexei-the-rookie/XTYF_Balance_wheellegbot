@@ -1,0 +1,49 @@
+[0.009s] Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/nuaawzh/dev_ws/src/balance_bot -DCMAKE_INSTALL_PREFIX=/home/nuaawzh/dev_ws/install/balance_bot
+[0.142s] -- The C compiler identification is GNU 13.3.0
+[0.229s] -- The CXX compiler identification is GNU 13.3.0
+[0.244s] -- Detecting C compiler ABI info
+[0.311s] -- Detecting C compiler ABI info - done
+[0.316s] -- Check for working C compiler: /usr/bin/cc - skipped
+[0.316s] -- Detecting C compile features
+[0.316s] -- Detecting C compile features - done
+[0.324s] -- Detecting CXX compiler ABI info
+[0.389s] -- Detecting CXX compiler ABI info - done
+[0.394s] -- Check for working CXX compiler: /usr/bin/c++ - skipped
+[0.394s] -- Detecting CXX compile features
+[0.394s] -- Detecting CXX compile features - done
+[0.402s] -- Found ament_cmake: 2.5.4 (/opt/ros/jazzy/share/ament_cmake/cmake)
+[0.500s] -- Found Python3: /usr/bin/python3 (found version "3.12.3") found components: Interpreter 
+[0.584s] -- Found rclcpp: 28.1.12 (/opt/ros/jazzy/share/rclcpp/cmake)
+[0.628s] -- Found rosidl_generator_c: 4.6.6 (/opt/ros/jazzy/share/rosidl_generator_c/cmake)
+[0.640s] -- Found rosidl_generator_cpp: 4.6.6 (/opt/ros/jazzy/share/rosidl_generator_cpp/cmake)
+[0.657s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.673s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.743s] -- Found rmw_implementation_cmake: 7.3.2 (/opt/ros/jazzy/share/rmw_implementation_cmake/cmake)
+[0.747s] -- Found rmw_fastrtps_cpp: 8.4.3 (/opt/ros/jazzy/share/rmw_fastrtps_cpp/cmake)
+[0.829s] -- Found OpenSSL: /usr/lib/x86_64-linux-gnu/libcrypto.so (found version "3.0.13")  
+[0.844s] -- Found FastRTPS: /opt/ros/jazzy/include (Required is at least version "2.13") 
+[0.858s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.923s] -- Found geometry_msgs: 5.3.6 (/opt/ros/jazzy/share/geometry_msgs/cmake)
+[0.951s] -- Found sensor_msgs: 5.3.6 (/opt/ros/jazzy/share/sensor_msgs/cmake)
+[0.971s] -- Found tf2_ros: 0.36.14 (/opt/ros/jazzy/share/tf2_ros/cmake)
+[1.085s] -- Found urdf: 2.10.0 (/opt/ros/jazzy/share/urdf/cmake)
+[1.105s] -- Found xacro: 2.1.1 (/opt/ros/jazzy/share/xacro/cmake)
+[1.112s] [31mCMake Error at CMakeLists.txt:17 (find_package):
+[1.112s]   By not providing "Findgazebo_ros_pkgs.cmake" in CMAKE_MODULE_PATH this
+[1.112s]   project has asked CMake to find a package configuration file provided by
+[1.113s]   "gazebo_ros_pkgs", but CMake did not find one.
+[1.113s] 
+[1.113s]   Could not find a package configuration file provided by "gazebo_ros_pkgs"
+[1.113s]   with any of the following names:
+[1.113s] 
+[1.113s]     gazebo_ros_pkgsConfig.cmake
+[1.113s]     gazebo_ros_pkgs-config.cmake
+[1.113s] 
+[1.113s]   Add the installation prefix of "gazebo_ros_pkgs" to CMAKE_PREFIX_PATH or
+[1.113s]   set "gazebo_ros_pkgs_DIR" to a directory containing one of the above files.
+[1.113s]   If "gazebo_ros_pkgs" provides a separate development package or SDK, be
+[1.113s]   sure it has been installed.
+[1.113s] 
+[1.113s] [0m
+[1.113s] -- Configuring incomplete, errors occurred!
+[1.119s] Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '1': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/nuaawzh/dev_ws/src/balance_bot -DCMAKE_INSTALL_PREFIX=/home/nuaawzh/dev_ws/install/balance_bot

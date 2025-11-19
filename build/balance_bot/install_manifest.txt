@@ -1,0 +1,15 @@
+/home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/package_run_dependencies/balance_bot
+/home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/parent_prefix_path/balance_bot
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.sh
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.dsv
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/path.sh
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/path.dsv
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.bash
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.sh
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.zsh
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.dsv
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/package.dsv
+/home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/packages/balance_bot
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/cmake/balance_botConfig.cmake
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/cmake/balance_botConfig-version.cmake
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/package.xml

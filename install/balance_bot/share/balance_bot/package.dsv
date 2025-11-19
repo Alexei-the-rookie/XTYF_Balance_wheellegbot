@@ -1,0 +1,6 @@
+source;share/balance_bot/hook/cmake_prefix_path.dsv
+source;share/balance_bot/hook/cmake_prefix_path.sh
+source;share/balance_bot/local_setup.bash
+source;share/balance_bot/local_setup.dsv
+source;share/balance_bot/local_setup.sh
+source;share/balance_bot/local_setup.zsh

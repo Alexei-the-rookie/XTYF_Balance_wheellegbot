@@ -1,0 +1,2 @@
+Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/nuaawzh/dev_ws/src/balance_bot -DCMAKE_INSTALL_PREFIX=/home/nuaawzh/dev_ws/install/balance_bot
+Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '1': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/nuaawzh/dev_ws/src/balance_bot -DCMAKE_INSTALL_PREFIX=/home/nuaawzh/dev_ws/install/balance_bot
