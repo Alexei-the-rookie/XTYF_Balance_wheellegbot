@@ -1,0 +1,179 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="leg_initial_pose_module" params="prefix parent x y z mirror">
+
+    <!-- 定义几何参数 -->
+    <xacro:property name="thigh_length" value="0.35" />    <!-- 大腿长度 -->
+    <xacro:property name="shank_length" value="0.3" />     <!-- 小腿长度 -->
+
+    <xacro:property name="leg_diameter" value="0.02" />
+    <xacro:property name="wheel_radius" value="0.08" />
+    <xacro:property name="wheel_thickness" value="0.04" />
+
+    <!-- 初始角度参数 -->
+    <xacro:property name="initial_hip_angle" value="${-pi/3}" />  <!-- 大腿与地面法线成60度角（-60度） -->
+    <xacro:property name="initial_knee_angle" value="${2*pi/3}" /> <!-- 膝关节角度，使轮子投影与髋关节重合 -->
+
+    <!-- 镜像因子 -->
+    <xacro:property name="mirror_factor" value="${-1 if mirror else 1}" />
+
+    <!-- ========== 大腿 (Thigh) ========== -->
+    <link name="${prefix}_thigh">
+      <visual>
+        <geometry>
+          <cylinder radius="${leg_diameter/2}" length="${thigh_length}"/>
+        </geometry>
+        <material name="red">
+          <color rgba="0.8 0 0 1"/>
+        </material>
+        <origin xyz="0 0 ${-thigh_length/2}" rpy="0 0 0"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${leg_diameter/2}" length="${thigh_length}"/>
+        </geometry>
+        <origin xyz="0 0 ${-thigh_length/2}" rpy="0 0 0"/>
+      </collision>
+      <inertial>
+        <mass value="0.4"/>
+        <inertia ixx="0.003" ixy="0.0" ixz="0.0" iyy="0.003" iyz="0.0" izz="0.0002"/>
+      </inertial>
+    </link>
+
+    <!-- 大腿与机体的关节 (髋关节电机) - 初始角度为-60度 -->
+    <joint name="${prefix}_hip_joint" type="revolute">
+      <parent link="${parent}"/>
+      <child link="${prefix}_thigh"/>
+      <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="-2.0" upper="1.0" effort="30.0" velocity="3.0"/>
+      <!-- 设置初始位置 -->
+      <xacro:if value="${mirror}">
+        <origin rpy="0 ${initial_hip_angle} 0" xyz="${x} ${y} ${z}"/>
+      </xacro:if>
+      <xacro:unless value="${mirror}">
+        <origin rpy="0 ${initial_hip_angle} 0" xyz="${x} ${y} ${z}"/>
+      </xacro:unless>
+    </joint>
+
+    <!-- ========== 小腿 (Shank) ========== -->
+    <link name="${prefix}_shank">
+      <visual>
+        <geometry>
+          <cylinder radius="${leg_diameter/2}" length="${shank_length}"/>
+        </geometry>
+        <material name="green">
+          <color rgba="0 0.8 0 1"/>
+        </material>
+        <origin xyz="0 0 ${-shank_length/2}" rpy="0 0 0"/>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${leg_diameter/2}" length="${shank_length}"/>
+        </geometry>
+        <origin xyz="0 0 ${-shank_length/2}" rpy="0 0 0"/>
+      </collision>
+      <inertial>
+        <mass value="0.3"/>
+        <inertia ixx="0.002" ixy="0.0" ixz="0.0" iyy="0.002" iyz="0.0" izz="0.0001"/>
+      </inertial>
+    </link>
+
+    <!-- 小腿与大腿的关节 (膝关节电机) - 初始角度为120度 -->
+    <joint name="${prefix}_knee_joint" type="revolute">
+      <parent link="${prefix}_thigh"/>
+      <child link="${prefix}_shank"/>
+      <origin xyz="0 0 ${-thigh_length}" rpy="0 0 0"/>
+      <axis xyz="0 1 0"/>
+      <limit lower="0.5" upper="2.5" effort="25.0" velocity="3.0"/>
+      <!-- 设置初始位置 -->
+      <xacro:if value="${mirror}">
+        <origin rpy="0 ${initial_knee_angle} 0" xyz="0 0 ${-thigh_length}"/>
+      </xacro:if>
+      <xacro:unless value="${mirror}">
+        <origin rpy="0 ${initial_knee_angle} 0" xyz="0 0 ${-thigh_length}"/>
+      </xacro:unless>
+    </joint>
+
+    <!-- ========== 轮子 (Wheel) ========== -->
+    <link name="${prefix}_wheel">
+      <visual>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_thickness}"/>
+        </geometry>
+        <material name="black">
+          <color rgba="0 0 0 1"/>
+        </material>
+      </visual>
+      <collision>
+        <geometry>
+          <cylinder radius="${wheel_radius}" length="${wheel_thickness}"/>
+        </geometry>
+      </collision>
+      <inertial>
+        <mass value="0.5"/>
+        <inertia ixx="0.002" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.002"/>
+      </inertial>
+    </link>
+
+    <!-- 轮子与小腿的关节 (无刷电机) -->
+    <joint name="${prefix}_wheel_joint" type="continuous">
+      <parent link="${prefix}_shank"/>
+      <child link="${prefix}_wheel"/>
+      <origin xyz="0 0 ${-shank_length}" rpy="${pi/2} 0 0"/>
+      <axis xyz="0 1 0"/>
+    </joint>
+
+    <!-- ========== 传输定义 ========== -->
+
+    <!-- 髋关节传输 -->
+    <transmission name="${prefix}_hip_trans">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="${prefix}_hip_joint">
+        <hardwareInterface>PositionJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="${prefix}_hip_motor">
+        <hardwareInterface>PositionJointInterface</hardwareInterface>
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
+    <!-- 膝关节传输 -->
+    <transmission name="${prefix}_knee_trans">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="${prefix}_knee_joint">
+        <hardwareInterface>PositionJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="${prefix}_knee_motor">
+        <hardwareInterface>PositionJointInterface</hardwareInterface>
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
+    <!-- 轮子关节传输 -->
+    <transmission name="${prefix}_wheel_trans">
+      <type>transmission_interface/SimpleTransmission</type>
+      <joint name="${prefix}_wheel_joint">
+        <hardwareInterface>VelocityJointInterface</hardwareInterface>
+      </joint>
+      <actuator name="${prefix}_wheel_motor">
+        <hardwareInterface>VelocityJointInterface</hardwareInterface>
+        <mechanicalReduction>1</mechanicalReduction>
+      </actuator>
+    </transmission>
+
+    <!-- Gazebo材质 -->
+    <gazebo reference="${prefix}_thigh">
+      <material>Gazebo/Red</material>
+    </gazebo>
+    <gazebo reference="${prefix}_shank">
+      <material>Gazebo/Green</material>
+    </gazebo>
+    <gazebo reference="${prefix}_wheel">
+      <material>Gazebo/Black</material>
+    </gazebo>
+
+  </xacro:macro>
+
+</robot>

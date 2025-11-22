@@ -1,0 +1,64 @@
+<?xml version="1.0"?>
+<robot name="wheel_leg_robot" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- 包含基础模型 -->
+  <xacro:include filename="$(find balance_bot)/urdf/wheel_leg_initial_pose.xacro" />
+
+  <!-- 添加IMU传感器插件 -->
+  <gazebo reference="base_link">
+    <sensor name="imu_sensor" type="imu">
+      <always_on>true</always_on>
+      <update_rate>100</update_rate>
+      <imu>
+        <noise>
+          <type>gaussian</type>
+          <rate>
+            <mean>0.0</mean>
+            <stddev>0.0002</stddev>
+            <bias_mean>0.0000075</bias_mean>
+            <bias_stddev>0.0000008</bias_stddev>
+          </rate>
+          <accel>
+            <mean>0.0</mean>
+            <stddev>0.017</stddev>
+            <bias_mean>0.1</bias_mean>
+            <bias_stddev>0.001</bias_stddev>
+          </accel>
+        </noise>
+      </imu>
+    </sensor>
+  </gazebo>
+
+  <!-- IMU ROS插件 -->
+  <gazebo>
+    <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+      <topicName>/imu</topicName>
+      <bodyName>base_link</bodyName>
+      <updateRateHZ>100.0</updateRateHZ>
+      <gravityZ>9.81</gravityZ>
+      <xyzOffset>0 0 0</xyzOffset>
+      <rpyOffset>0 0 0</rpyOffset>
+      <frameName>base_link</frameName>
+    </plugin>
+  </gazebo>
+
+  <!-- 里程计插件 -->
+  <gazebo>
+    <plugin filename="libgazebo_ros_diff_drive.so" name="diff_drive_controller">
+      <ros>
+        <namespace>/wheel_leg_robot</namespace>
+      </ros>
+      <update_rate>50</update_rate>
+      <left_joint>left_wheel_joint</left_joint>
+      <right_joint>right_wheel_joint</right_joint>
+      <wheel_separation>0.3</wheel_separation>
+      <wheel_diameter>0.16</wheel_diameter>
+      <max_wheel_torque>20</max_wheel_torque>
+      <command_topic>/cmd_vel</command_topic>
+      <odometry_topic>odom</odometry_topic>
+      <odometry_frame>odom</odometry_frame>
+      <robot_base_frame>base_link</robot_base_frame>
+    </plugin>
+  </gazebo>
+
+</robot>

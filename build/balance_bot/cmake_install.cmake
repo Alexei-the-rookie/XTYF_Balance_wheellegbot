@@ -43,6 +43,10 @@ if(NOT DEFINED CMAKE_OBJDUMP)
 endif()
 
 if(CMAKE_INSTALL_COMPONENT STREQUAL "Unspecified" OR NOT CMAKE_INSTALL_COMPONENT)
+  file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/lib/balance_bot" TYPE PROGRAM FILES "/home/nuaawzh/dev_ws/src/balance_bot/src/initial_pose_controller.py")
+endif()
+
+if(CMAKE_INSTALL_COMPONENT STREQUAL "Unspecified" OR NOT CMAKE_INSTALL_COMPONENT)
   file(INSTALL DESTINATION "${CMAKE_INSTALL_PREFIX}/share/balance_bot" TYPE DIRECTORY FILES "/home/nuaawzh/dev_ws/src/balance_bot/launch")
 endif()
 

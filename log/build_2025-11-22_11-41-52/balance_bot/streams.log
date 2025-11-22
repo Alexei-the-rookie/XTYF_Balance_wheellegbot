@@ -1,0 +1,29 @@
+[0.007s] Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/nuaawzh/dev_ws/build/balance_bot -- -j32 -l32
+[0.039s] Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/nuaawzh/dev_ws/build/balance_bot -- -j32 -l32
+[0.046s] Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/nuaawzh/dev_ws/build/balance_bot
+[0.051s] -- Install configuration: ""
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/lib/balance_bot/initial_pose_controller.py
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/launch
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/launch/control.launch.py
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/bot_with_sensors.xacro
+[0.051s] -- Installing: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/wheel_leg_initial_pose.xacro
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/leg_initial_pose_module.xacro
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/config
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/worlds
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/package_run_dependencies/balance_bot
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/parent_prefix_path/balance_bot
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.sh
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.dsv
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/path.sh
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/path.dsv
+[0.051s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.bash
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.sh
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.zsh
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.dsv
+[0.052s] -- Installing: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/package.dsv
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/packages/balance_bot
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/cmake/balance_botConfig.cmake
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/cmake/balance_botConfig-version.cmake
+[0.052s] -- Up-to-date: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/package.xml
+[0.053s] Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/nuaawzh/dev_ws/build/balance_bot

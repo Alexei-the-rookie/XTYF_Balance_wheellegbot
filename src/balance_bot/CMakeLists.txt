@@ -17,7 +17,9 @@ find_package(xacro REQUIRED)
 find_package(ros_gz REQUIRED)
 find_package(ros_gz_sim REQUIRED)
 
-# 在CMakeLists.txt中添加以下内容（在if(BUILD_TESTING)之前）
+install(PROGRAMS
+  src/initial_pose_controller.py
+  DESTINATION lib/${PROJECT_NAME})
 
 # 安装launch文件
 install(DIRECTORY launch
