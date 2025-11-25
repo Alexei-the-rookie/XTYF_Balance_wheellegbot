@@ -13,30 +13,23 @@ class PureLQRController(Node):
     def __init__(self):
         super().__init__('pure_lqr_controller')
 
-        # 状态变量 (8维状态向量)
+        # 状态变量 (6维状态向量)
+        self.theta = 0.0          # 机体俯仰角 [rad]
+        self.theta_dot = 0.0      # 机体俯仰角速度 [rad/s]
         self.x_pos = 0.0          # 前后方向位置 [m]
         self.x_vel = 0.0          # 前后方向速度 [m/s]
-        self.height = 0.5         # 机体离地高度 [m]
-        self.height_vel = 0.0     # 高度变化速度 [m/s]
-        self.pitch = 0.0          # 俯仰角 [rad]
-        self.pitch_vel = 0.0      # 俯仰角速度 [rad/s]
-        self.yaw = 0.0            # 偏航角 [rad]
-        self.yaw_vel = 0.0        # 偏航角速度 [rad/s]
+        self.phi = 0.0            # 腿与竖直方向夹角 [rad]
+        self.phi_dot = 0.0        # 腿与竖直方向夹角速度 [rad/s]
 
         # 参考状态
         self.x_ref = 0.0          # 参考位置 [m]
         self.x_vel_ref = 0.0      # 参考速度 [m/s]
-        self.height_ref = 0.5     # 参考高度 [m]
-        self.pitch_ref = 0.0      # 参考俯仰角 [rad]
-        self.yaw_ref = 0.0        # 参考偏航角 [rad]
+        self.psi_dot_ref = 0.0    # 参考偏航角速度 [rad/s]
+        self.gamma_ref =0.0       # 参考横滚姿态角 [rad]
 
-        # LQR控制输出 (6维控制向量)
-        self.left_wheel_velocity = 0.0    # 左轮速度 [rad/s]
-        self.right_wheel_velocity = 0.0   # 右轮速度 [rad/s]
-        self.left_hip_torque = 0.0        # 左髋关节力矩 [Nm]
-        self.right_hip_torque = 0.0       # 右髋关节力矩 [Nm]
-        self.left_knee_torque = 0.0       # 左膝关节力矩 [Nm]
-        self.right_knee_torque = 0.0      # 右膝关节力矩 [Nm]
+        # LQR控制输入 (2维控制向量)
+        self.T = 0.0              # 轮子的转矩 [Nm]
+        self.T_p =0.0             # 关节转矩 [Nm]
 
         # LQR参数
         self.Q = None  # 状态权重矩阵 (8x8)
@@ -44,12 +37,17 @@ class PureLQRController(Node):
         self.K = None  # LQR增益矩阵 (6x8)
 
         # 系统物理参数
-        self.mass = 3.0              # 总质量 [kg]
+        self.mass = 3.0              # 机体质量 [kg]
         self.g = 9.81                # 重力加速度 [m/s²]
         self.wheel_radius = 0.08     # 轮子半径 [m]
-        self.body_moi = 0.1          # 机体转动惯量 [kg·m²]
-        self.wheel_moi = 0.01        # 轮子转动惯量 [kg·m²]
-        self.leg_length = 0.45       # 腿长度 [m]
+        self.I_body = 0.1            # 机体转动惯量 [kg·m²]
+        self.I_wheel = 0.01          # 轮子转动惯量 [kg·m²]
+        self.I_leg = 0.02            # 腿转动惯量 [kg·m²]
+        self.leg_length = 0.45       # 腿长度(经过计算得到) [m]
+        self.L = 0.2                 # 腿重心到轮子的长度 [m]
+        self.L_m = 0.3               # 腿重心到髋关节的长度 [m]
+        self.mass_w = 0.01           # 轮子重量 [kg]
+        self.mass_leg = 0.5          # 单腿重量 [kg]
 
         # 控制限制
         self.max_wheel_velocity = 10.0   # 最大轮子速度 [rad/s]
@@ -94,38 +92,31 @@ class PureLQRController(Node):
 
     def init_lqr(self):
         """初始化LQR控制器参数"""
-        # 状态向量: [x_pos, x_vel, height, height_vel, pitch, pitch_vel, yaw, yaw_vel]
-        # 控制向量: [left_wheel_velocity, right_wheel_velocity, left_hip_torque, right_hip_torque, left_knee_torque, right_knee_torque]
+        # 状态向量: [theta, theta_dot, x_pos, x_vel, phi, phi_dot]
+        # 控制向量: [T, T_p]
 
-        # 状态权重矩阵 Q (8x8)
+        # 状态权重矩阵 Q (6x6)
         # 对角元素分别对应各个状态的权重
         self.Q = np.diag([
+            80.0,   # theta - 平衡最重要
+            25.0,   # theta_dot - 俯仰角速度控制
             0.5,    # x_pos - 位置控制权重较低
             2.0,    # x_vel - 速度控制中等权重
-            20.0,   # height - 高度控制很重要
-            8.0,    # height_vel - 高度速度控制
-            80.0,   # pitch - 平衡最重要
-            25.0,   # pitch_vel - 俯仰角速度控制
-            8.0,    # yaw - 偏航角控制
-            3.0     # yaw_vel - 偏航角速度控制
+            8.0,    # phi - 腿角控制
+            3.0     # phi_dot - 腿角速度控制
         ])
 
-        # 控制权重矩阵 R (6x6)
-        # 注意：轮子控制是速度，关节控制是力矩，需要不同的权重
+        # 控制权重矩阵 R (2x2)
         self.R = np.diag([
-            0.02,   # left_wheel_velocity - 轮子速度控制权重较低
-            0.02,   # right_wheel_velocity
-            0.5,    # left_hip_torque - 关节力矩控制权重中等
-            0.5,    # right_hip_torque
-            0.5,    # left_knee_torque
-            0.5     # right_knee_torque
+            0.02,   # T - 轮子力矩控制权重
+            0.02,   # T_p - 关节力矩控制权重
         ])
 
-        # 构建系统矩阵 A (8x8)
+        # 构建系统矩阵 A (6x6)
         # 这是简化的线性化模型，实际应用中需要通过系统辨识得到
         A = self.build_system_matrix()
 
-        # 构建控制矩阵 B (8x6)
+        # 构建控制矩阵 B (6x2)
         B = self.build_control_matrix()
 
         # 求解连续时间代数Riccati方程
@@ -142,33 +133,19 @@ class PureLQRController(Node):
     def build_system_matrix(self):
         """构建系统矩阵 A"""
         # 简化的线性化模型，在平衡点附近
-        A = np.zeros((8, 8))
+        #[theta, theta_dot, x_pos, x_vel, phi, phi_dot]
+        A = np.zeros((6, 6))
 
         # 位置和速度关系
-        A[0, 1] = 1.0  # x_pos_dot = x_vel
-
-        # 速度和俯仰角关系 (倒立摆效应)
-        A[1, 4] = self.g  # x_vel_dot 受俯仰角影响
-
-        # 高度和高度速度关系
-        A[2, 3] = 1.0  # height_dot = height_vel
-
-        # 高度加速度 (简化的弹簧-质量模型)
-        A[3, 2] = -20.0  # 高度恢复力
-        A[3, 3] = -2.0   # 高度阻尼
-
-        # 俯仰角和角速度关系
-        A[4, 5] = 1.0  # pitch_dot = pitch_vel
-
-        # 俯仰角加速度 (简化的倒立摆模型)
-        A[5, 4] = 3 * self.g / (2 * self.leg_length)  # 倒立摆不稳定项
-        A[5, 5] = -1.0  # 俯仰阻尼
-
-        # 偏航角和角速度关系
-        A[6, 7] = 1.0  # yaw_dot = yaw_vel
-
-        # 偏航角加速度
-        A[7, 7] = -0.5  # 偏航阻尼
+        A[0, 1] = 1    # theta_dot = theta_dot
+        A[1, 0] = 1    # A_1 计算
+        A[1, 4] = 1    # A_2 计算
+        A[2, 3] = 1    # x_dot = x_vel
+        A[3, 0] = 1    # A_3 计算
+        A[3, 4] = 1    # A_4 计算
+        A[4, 5] = 1    # phi_dot = phi_dot
+        A[5, 0] = 1    # A_5 计算
+        A[5, 4] = 1    # A_6 计算
 
         return A
 
@@ -176,30 +153,13 @@ class PureLQRController(Node):
         """构建控制矩阵 B"""
         B = np.zeros((8, 6))
 
-        # 轮子速度对前后速度的影响
-        wheel_effect = self.wheel_radius / 2.0
-        B[1, 0] = wheel_effect  # 左轮速度对前后速度的影响
-        B[1, 1] = wheel_effect  # 右轮速度对前后速度的影响
-
-        # 关节力矩对高度加速度的影响
-        torque_to_height = 1.0 / (self.mass * self.leg_length)
-        B[3, 2] = torque_to_height  # 左髋关节力矩对高度的影响
-        B[3, 3] = torque_to_height  # 右髋关节力矩对高度的影响
-        B[3, 4] = torque_to_height  # 左膝关节力矩对高度的影响
-        B[3, 5] = torque_to_height  # 右膝关节力矩对高度的影响
-
-        # 轮子速度差对偏航角加速度的影响
-        yaw_effect = self.wheel_radius / (0.3 * self.body_moi)  # 假设轮距为0.3m
-        B[7, 0] = yaw_effect   # 左轮速度对偏航的影响
-        B[7, 1] = -yaw_effect  # 右轮速度对偏航的影响 (方向相反)
-
-        # 关节力矩对俯仰角加速度的影响
-        pitch_effect = 1.0 / self.body_moi
-        B[5, 2] = pitch_effect  # 左髋关节力矩对俯仰的影响
-        B[5, 3] = pitch_effect  # 右髋关节力矩对俯仰的影响
-        B[5, 4] = pitch_effect  # 左膝关节力矩对俯仰的影响
-        B[5, 5] = pitch_effect  # 右膝关节力矩对俯仰的影响
-
+        # 控制输入对状态的影响
+        B[1, 0] = 1    # B_1 计算
+        B[1, 1] = 1    # B_2 计算
+        B[3, 0] = 1    # B_3 计算
+        B[3, 1] = 1    # B_4 计算
+        B[5, 0] = 1    # B_5 计算
+        B[5, 1] = 1    # B_6 计算
         return B
 
     def imu_callback(self, msg):
@@ -224,6 +184,7 @@ class PureLQRController(Node):
         self.yaw = math.atan2(siny_cosp, cosy_cosp)
 
         # 角速度
+        self.roll_vel = msg.angular_velocity.x
         self.pitch_vel = msg.angular_velocity.y
         self.yaw_vel = msg.angular_velocity.z
 
@@ -231,11 +192,6 @@ class PureLQRController(Node):
         """处理里程计数据"""
         self.x_pos = msg.pose.pose.position.x
         self.x_vel = msg.twist.twist.linear.x
-        self.height = msg.pose.pose.position.z
-
-        # 估计高度变化速度
-        dt = 0.02  # 控制周期
-        self.height_vel = (msg.pose.pose.position.z - self.height) / dt
 
     def cmd_vel_callback(self, msg):
         """处理速度命令"""
