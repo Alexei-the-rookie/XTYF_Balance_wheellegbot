@@ -13,13 +13,17 @@ class PureLQRController(Node):
     def __init__(self):
         super().__init__('pure_lqr_controller')
 
-        # 状态变量 (6维状态向量)
-        self.theta = 0.0          # 机体俯仰角 [rad]
-        self.theta_dot = 0.0      # 机体俯仰角速度 [rad/s]
-        self.x_pos = 0.0          # 前后方向位置 [m]
-        self.x_vel = 0.0          # 前后方向速度 [m/s]
-        self.phi = 0.0            # 腿与竖直方向夹角 [rad]
-        self.phi_dot = 0.0        # 腿与竖直方向夹角速度 [rad/s]
+        # 状态变量 (10维状态向量)
+        self.s = 0.0                # 位置 [m]
+        self.s_dot = 0.0            # 速度 [m/s]
+        self.phi = 0.0              # 偏航角 [rad]
+        self.phi_dot = 0.0          # 偏航角速度
+        self.theta_ll = 0.0          # 左腿角 [rad]
+        self.theta_ll_dot = 0.0      # 左腿角速度
+        self.theta_rl = 0.0          # 右腿角 [rad]
+        self.theta_rl_dot = 0.0      # 右腿角速度
+        self.theta_b = 0.0           # 机体倾斜角 [rad]
+        self.theta_b_dot = 0.0       # 机体倾斜角速度
 
         # 参考状态
         self.x_ref = 0.0          # 参考位置 [m]
@@ -27,9 +31,11 @@ class PureLQRController(Node):
         self.psi_dot_ref = 0.0    # 参考偏航角速度 [rad/s]
         self.gamma_ref =0.0       # 参考横滚姿态角 [rad]
 
-        # LQR控制输入 (2维控制向量)
-        self.T = 0.0              # 轮子的转矩 [Nm]
-        self.T_p =0.0             # 关节转矩 [Nm]
+        # LQR控制输入 (6维控制向量)
+        self.T_lw_l = 0.0    # 左轮力矩 [Nm]
+        self.T_lw_r = 0.0    # 右轮力矩 [
+        self.T_bl_l = 0.0    # 左腿髋关节力矩 [Nm]
+        self.T_bl_r = 0.0    # 右腿髋关节力矩 [Nm]
 
         # LQR参数
         self.Q = None  # 状态权重矩阵 (8x8)
@@ -37,17 +43,18 @@ class PureLQRController(Node):
         self.K = None  # LQR增益矩阵 (6x8)
 
         # 系统物理参数
-        self.mass = 3.0              # 机体质量 [kg]
+        self.m_b = 3.0               # 机体质量 [kg]
         self.g = 9.81                # 重力加速度 [m/s²]
-        self.wheel_radius = 0.08     # 轮子半径 [m]
-        self.I_body = 0.1            # 机体转动惯量 [kg·m²]
-        self.I_wheel = 0.01          # 轮子转动惯量 [kg·m²]
-        self.I_leg = 0.02            # 腿转动惯量 [kg·m²]
-        self.leg_length = 0.45       # 腿长度(经过计算得到) [m]
+        self.R_w = 0.08              # 轮子半径 [m]
+        self.I_b = 0.1            # 机体转动惯量 [kg·m²]
+        self.I_w = 0.01          # 轮子转动惯量 [kg·m²]
+        self.I_l = 0.02            # 腿转动惯量 [kg·m²]
+        ##self.leg_length = 0.45       # 腿长度(经过计算得到) [m]
         self.L = 0.2                 # 腿重心到轮子的长度 [m]
         self.L_m = 0.3               # 腿重心到髋关节的长度 [m]
-        self.mass_w = 0.01           # 轮子重量 [kg]
-        self.mass_leg = 0.5          # 单腿重量 [kg]
+        self.m_w = 0.01           # 轮子重量 [kg]
+        self.m_l = 0.5               # 单腿重量 [kg]
+        self.I_z = 0.02            # 机体偏航转动惯量 [kg·m²]
 
         # 控制限制
         self.max_wheel_velocity = 10.0   # 最大轮子速度 [rad/s]
@@ -95,7 +102,7 @@ class PureLQRController(Node):
         # 状态向量: [theta, theta_dot, x_pos, x_vel, phi, phi_dot]
         # 控制向量: [T, T_p]
 
-        # 状态权重矩阵 Q (6x6)
+        # 状态权重矩阵 Q (10x10)
         # 对角元素分别对应各个状态的权重
         self.Q = np.diag([
             80.0,   # theta - 平衡最重要
@@ -106,17 +113,19 @@ class PureLQRController(Node):
             3.0     # phi_dot - 腿角速度控制
         ])
 
-        # 控制权重矩阵 R (2x2)
+        # 控制权重矩阵 R (4x4)
         self.R = np.diag([
-            0.02,   # T - 轮子力矩控制权重
-            0.02,   # T_p - 关节力矩控制权重
+            0.1,    # T - 轮子力矩控制权重较低
+            0.1,    # T - 轮子力矩控制权重较低
+            1.0,    # T_p - 髋关节力矩控制权重较高
+            1.0     # T_p - 髋关节力矩控制权重较高
         ])
 
-        # 构建系统矩阵 A (6x6)
+        # 构建系统矩阵 A (10x10)
         # 这是简化的线性化模型，实际应用中需要通过系统辨识得到
         A = self.build_system_matrix()
 
-        # 构建控制矩阵 B (6x2)
+        # 构建控制矩阵 B (10x4)
         B = self.build_control_matrix()
 
         # 求解连续时间代数Riccati方程
@@ -134,7 +143,7 @@ class PureLQRController(Node):
         """构建系统矩阵 A"""
         # 简化的线性化模型，在平衡点附近
         #[theta, theta_dot, x_pos, x_vel, phi, phi_dot]
-        A = np.zeros((6, 6))
+        A = np.zeros((10, 10))
 
         # 位置和速度关系
         A[0, 1] = 1    # theta_dot = theta_dot
@@ -151,7 +160,7 @@ class PureLQRController(Node):
 
     def build_control_matrix(self):
         """构建控制矩阵 B"""
-        B = np.zeros((8, 6))
+        B = np.zeros((10, 4))
 
         # 控制输入对状态的影响
         B[1, 0] = 1    # B_1 计算
