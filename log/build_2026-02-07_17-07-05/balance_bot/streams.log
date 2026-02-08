@@ -1,0 +1,59 @@
+[0.017s] Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/nuaawzh/dev_ws/src/balance_bot -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/nuaawzh/dev_ws/install/balance_bot
+[0.086s] -- Found ament_cmake: 2.5.4 (/opt/ros/jazzy/share/ament_cmake/cmake)
+[0.423s] -- Override CMake install command with custom implementation using symlinks instead of copying resources
+[0.441s] -- Found rclcpp: 28.1.13 (/opt/ros/jazzy/share/rclcpp/cmake)
+[0.492s] -- Found rosidl_generator_c: 4.6.6 (/opt/ros/jazzy/share/rosidl_generator_c/cmake)
+[0.506s] -- Found rosidl_generator_cpp: 4.6.6 (/opt/ros/jazzy/share/rosidl_generator_cpp/cmake)
+[0.524s] -- Using all available rosidl_typesupport_c: rosidl_typesupport_fastrtps_c;rosidl_typesupport_introspection_c
+[0.543s] -- Using all available rosidl_typesupport_cpp: rosidl_typesupport_fastrtps_cpp;rosidl_typesupport_introspection_cpp
+[0.622s] -- Found rmw_implementation_cmake: 7.3.2 (/opt/ros/jazzy/share/rmw_implementation_cmake/cmake)
+[0.624s] -- Found rmw_fastrtps_cpp: 8.4.3 (/opt/ros/jazzy/share/rmw_fastrtps_cpp/cmake)
+[0.676s] -- Using RMW implementation 'rmw_fastrtps_cpp' as default
+[0.721s] -- Found geometry_msgs: 5.3.6 (/opt/ros/jazzy/share/geometry_msgs/cmake)
+[0.742s] -- Found sensor_msgs: 5.3.6 (/opt/ros/jazzy/share/sensor_msgs/cmake)
+[0.759s] -- Found tf2_ros: 0.36.16 (/opt/ros/jazzy/share/tf2_ros/cmake)
+[0.837s] -- Found urdf: 2.10.0 (/opt/ros/jazzy/share/urdf/cmake)
+[0.844s] -- Found xacro: 2.1.1 (/opt/ros/jazzy/share/xacro/cmake)
+[0.845s] -- Found ros_gz: 1.0.16 (/opt/ros/jazzy/share/ros_gz/cmake)
+[0.845s] -- Found ros_gz_sim: 1.0.16 (/opt/ros/jazzy/share/ros_gz_sim/cmake)
+[0.848s] -- Found ament_lint_auto: 0.17.3 (/opt/ros/jazzy/share/ament_lint_auto/cmake)
+[0.909s] -- Added test 'cppcheck' to perform static code analysis on C / C++ code
+[0.909s] -- Configured cppcheck include dirs: 
+[0.909s] -- Configured cppcheck exclude dirs and/or files: 
+[0.910s] -- Added test 'flake8' to check Python code syntax and style conventions
+[0.910s] -- Configured 'flake8' exclude dirs and/or files: 
+[0.911s] -- Added test 'lint_cmake' to check CMake code style
+[0.912s] -- Added test 'pep257' to check Python code against some of the docstring style conventions in PEP 257
+[0.916s] -- Added test 'uncrustify' to check C / C++ code style
+[0.916s] -- Configured uncrustify additional arguments: 
+[0.916s] -- Added test 'xmllint' to check XML markup files
+[0.917s] -- Configuring done (0.8s)
+[0.924s] -- Generating done (0.0s)
+[0.926s] -- Build files have been written to: /home/nuaawzh/dev_ws/build/balance_bot
+[0.932s] Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake /home/nuaawzh/dev_ws/src/balance_bot -DAMENT_CMAKE_SYMLINK_INSTALL=1 -DCMAKE_INSTALL_PREFIX=/home/nuaawzh/dev_ws/install/balance_bot
+[0.933s] Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/nuaawzh/dev_ws/build/balance_bot -- -j32 -l32
+[0.965s] Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --build /home/nuaawzh/dev_ws/build/balance_bot -- -j32 -l32
+[0.971s] Invoking command in '/home/nuaawzh/dev_ws/build/balance_bot': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/nuaawzh/dev_ws/build/balance_bot
+[0.976s] -- Install configuration: ""
+[0.977s] -- Execute custom install script
+[0.977s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/lib/balance_bot/initial_pose_controller.py
+[0.984s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/launch/control.launch.py
+[0.990s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/bot_with_sensors.xacro
+[0.996s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/leg_initial_pose_module.xacro
+[1.003s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/wheel_leg_initial_pose.xacro
+[1.009s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/package_run_dependencies/balance_bot
+[1.016s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/parent_prefix_path/balance_bot
+[1.022s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.sh
+[1.028s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.dsv
+[1.034s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/path.sh
+[1.040s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/path.dsv
+[1.047s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.bash
+[1.053s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.sh
+[1.059s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.zsh
+[1.066s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/local_setup.dsv
+[1.072s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/package.dsv
+[1.078s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/packages/balance_bot
+[1.084s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/cmake/balance_botConfig.cmake
+[1.090s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/cmake/balance_botConfig-version.cmake
+[1.096s] -- Symlinking: /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/package.xml
+[1.104s] Invoked command in '/home/nuaawzh/dev_ws/build/balance_bot' returned '0': CMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}:/opt/ros/jazzy DEBUGINFOD_URLS=https://debuginfod.ubuntu.com /usr/bin/cmake --install /home/nuaawzh/dev_ws/build/balance_bot

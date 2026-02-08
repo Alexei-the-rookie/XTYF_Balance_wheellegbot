@@ -14,22 +14,28 @@ class PureLQRController(Node):
         super().__init__('pure_lqr_controller')
 
         # 状态变量 (10维状态向量)
-        self.s = 0.0                # 位置 [m]
-        self.s_dot = 0.0            # 速度 [m/s]
-        self.phi = 0.0              # 偏航角 [rad]
-        self.phi_dot = 0.0          # 偏航角速度
-        self.theta_ll = 0.0          # 左腿角 [rad]
-        self.theta_ll_dot = 0.0      # 左腿角速度
-        self.theta_rl = 0.0          # 右腿角 [rad]
-        self.theta_rl_dot = 0.0      # 右腿角速度
+        self.theta_bl = 0.0                # 左侧腿角
+        self.dtheta_bl = 0.0            # 左侧腿角变化率
+        self.theta_br = 0.0              # 右侧腿角
+        self.dtheta_br = 0.0          # 右侧腿角变化率
+        self.theta_wl = 0.0          # 左腿与轮夹角
+        self.dtheta_wl = 0.0      # 左腿与轮夹角变化率
+        self.theta_wr = 0.0          # 右腿与轮夹角
+        self.dtheta_wr = 0.0      # 右腿角速度
         self.theta_b = 0.0           # 机体倾斜角 [rad]
-        self.theta_b_dot = 0.0       # 机体倾斜角速度
+        self.dtheta_b = 0.0       # 机体倾斜角速度
 
         # 参考状态
-        self.x_ref = 0.0          # 参考位置 [m]
-        self.x_vel_ref = 0.0      # 参考速度 [m/s]
-        self.psi_dot_ref = 0.0    # 参考偏航角速度 [rad/s]
-        self.gamma_ref =0.0       # 参考横滚姿态角 [rad]
+        self.theta_bl_ref = 0.0                # 左侧腿角
+        self.dtheta_bl_ref = 0.0            # 左侧腿角变化率
+        self.theta_br_ref = 0.0              # 右侧腿角
+        self.dtheta_br_ref = 0.0          # 右侧腿角变化率
+        self.theta_wl_ref = 0.0          # 左腿与轮夹角
+        self.dtheta_wl_ref = 0.0      # 左腿与轮夹角变化率
+        self.theta_wr_ref = 0.0          # 右腿与轮夹角
+        self.dtheta_wr_ref = 0.0      # 右腿角速度
+        self.theta_b_ref = 0.0           # 机体倾斜角 [rad]
+        self.dtheta_b_ref = 0.0       # 机体倾斜角速度
 
         # LQR控制输入 (6维控制向量)
         self.T_lw_l = 0.0    # 左轮力矩 [Nm]
@@ -43,17 +49,17 @@ class PureLQRController(Node):
         self.K = None  # LQR增益矩阵 (6x8)
 
         # 系统物理参数
-        self.m_b = 3.0               # 机体质量 [kg]
+        self.m_b = 22.0               # 机体质量 [kg]
         self.g = 9.81                # 重力加速度 [m/s²]
-        self.R_w = 0.08              # 轮子半径 [m]
+        self.R_w = 0.058              # 轮子半径 [m]
         self.I_b = 0.1            # 机体转动惯量 [kg·m²]
         self.I_w = 0.01          # 轮子转动惯量 [kg·m²]
         self.I_l = 0.02            # 腿转动惯量 [kg·m²]
         ##self.leg_length = 0.45       # 腿长度(经过计算得到) [m]
         self.L = 0.2                 # 腿重心到轮子的长度 [m]
         self.L_m = 0.3               # 腿重心到髋关节的长度 [m]
-        self.m_w = 0.01           # 轮子重量 [kg]
-        self.m_l = 0.5               # 单腿重量 [kg]
+        self.m_w = 0.985           # 轮子重量 [kg]
+        self.m_l = 2.0               # 单腿重量 [kg]
         self.I_z = 0.02            # 机体偏航转动惯量 [kg·m²]
 
         # 控制限制
