@@ -24,6 +24,7 @@ class PureLQRController(Node):
         self.dtheta_wr = 0.0      # 右腿角速度
         self.theta_b = 0.0           # 机体倾斜角 [rad]
         self.dtheta_b = 0.0       # 机体倾斜角速度
+
         self.roll = 0.0           # 机体翻滚角
 
         # 膝关节状态
@@ -266,21 +267,32 @@ class PureLQRController(Node):
         A[6, 7] = 1.0  # d(theta_wr) = dtheta_wr
         A[8, 9] = 1.0  # d(theta_b)  = dtheta_b
 
+        A[1, 0] = 374.21  # d(dtheta_bl) ~ theta_bl (腿部摆动动力学)
+        A[1, 2] = -43.45
+        A[3, 0] = -43.45  # d(dtheta_br) ~ theta_bl, theta_br (腿部摆动动力学)
+        A[3, 2] = 374.21
+        A[5, 0] = -904.77 # d(dtheta_wl) ~ theta_bl (轮子动力学)
+        A[5, 2] = 23.86
+        A[7, 0] = 23.86   # d(dtheta_wr) ~ theta_bl (轮子动力学)
+        A[7, 2] = -904.77
+        A[9, 0] = -23.65  # d(dtheta_b) ~ theta_bl (机体俯仰动力学)
+        A[9, 2] = -23.65  # d(dtheta_b) ~ theta_br (机体俯仰动力学)
+        A[9, 8] = 65.33   # d(dtheta_b) ~ theta_b (机体俯仰动力学)
         # 动力学近似
         # 这是一个高度简化的线性化模型，用于LQR求解
         # 实际上应该基于更精确的动力学方程
 
         # 机体俯仰动力学 (倒立摆)
         # d(dtheta_b) ~ g/L * theta_b
-        gravity_term = self.g / self.target_height # 使用目标高度作为倒立摆长度估计
-        A[9, 8] = gravity_term
+        #gravity_term = self.g / self.target_height # 使用目标高度作为倒立摆长度估计
+        #A[9, 8] = gravity_term
 
         # 腿部摆动动力学 (复摆)
         # d(dtheta_leg) ~ -g/L_leg * theta_leg
         # 使用腿部质心距离
-        leg_swing_term = -self.g / self.l_com_to_hip
-        A[1, 0] = leg_swing_term
-        A[3, 2] = leg_swing_term
+        #leg_swing_term = -self.g / self.l_com_to_hip
+        #A[1, 0] = leg_swing_term
+        #A[3, 2] = leg_swing_term
 
         return A
 
@@ -291,27 +303,48 @@ class PureLQRController(Node):
 
         B = np.zeros((10, 4))
 
+        B[1, 0] = 22.83   # d(dtheta_bl) ~ T_lw_l (轮子力矩对腿部加速的影响)
+        B[1, 1] = -2.65   # d(dtheta_bl) ~ T_lw_r
+        B[1, 2] = 178.30  # d(dtheta_bl) ~ T_bl_l (腿部虚拟转动力矩对腿部加速的影响)
+        B[1, 3] = -83.92  # d(dtheta_bl) ~ T_bl_r
+        B[3, 0] = -2.65   # d(dtheta_br) ~ T_lw_l
+        B[3, 1] = 22.83   # d(dtheta_br) ~ T_lw_r
+        B[3, 2] = -83.92  # d(dtheta_br) ~ T_bl_l
+        B[3, 3] = 178.30  # d(dtheta_br) ~ T_bl_r
+        B[5, 0] = -55.21  # d(dtheta_wl) ~ T_lw_l (轮子力矩对轮子加速的影响)
+        B[5, 1] = 1.46    # d(dtheta_wl) ~ T_lw_r
+        B[5, 2] = -270.00 # d(dtheta_wl) ~ T_bl_l (腿部虚拟转动力矩对轮子加速的影响)
+        B[5, 3] = 46.09   # d(dtheta_wl) ~ T_bl_r
+        B[7, 0] = 1.46    # d(dtheta_wr) ~ T_lw_l
+        B[7, 1] = -55.21  # d(dtheta_wr) ~ T_lw_r
+        B[7, 2] = 46.09   # d(dtheta_wr) ~ T_bl_l
+        B[7, 3] = -270.00 # d(dtheta_wr) ~ T_bl_r
+        B[9, 0] = -10.33  # d(dtheta_b) ~ T_lw_l (轮子力矩对机体俯仰加速的影响)
+        B[9, 1] = -10.33  # d(dtheta_b) ~ T_lw_r
+        B[9, 2] = -12.06  # d(dtheta_b) ~ T_bl_l (腿部虚拟转动力矩对机体俯仰加速的影响)
+        B[9, 3] = -12.06  # d(dtheta_b) ~ T_bl_r
+
         # 惯量参数近似
-        inv_I_w = 1.0 / self.I_w       # 轮子
-        inv_I_b = 1.0 / self.I_b       # 机体
-        inv_I_l = 1.0 / self.I_l       # 腿部
+        #inv_I_w = 1.0 / self.I_w       # 轮子
+        #inv_I_b = 1.0 / self.I_b       # 机体
+        #inv_I_l = 1.0 / self.I_l       # 腿部
 
         # 1. 轮子力矩 T_lw (Left at col 0, Right at col 1)
         # 对轮子加速
-        B[5, 0] = inv_I_w
-        B[7, 1] = inv_I_w
+        #B[5, 0] = inv_I_w
+        #B[7, 1] = inv_I_w
         # 对机体产生反作用力 (导致俯仰)
-        B[9, 0] = -inv_I_b
-        B[9, 1] = -inv_I_b
+        #B[9, 0] = -inv_I_b
+        #B[9, 1] = -inv_I_b
 
         # 2. 腿部虚拟力矩 T_bl (Left at col 2, Right at col 3)
         # 对腿部加速 (注意方向定义)
         # T_bl 是髋关节施加在虚拟杆上的力矩
-        B[1, 2] = inv_I_l
-        B[3, 3] = inv_I_l
+        #B[1, 2] = inv_I_l
+        #B[3, 3] = inv_I_l
         # 对机体产生反作用力
-        B[9, 2] = -inv_I_b
-        B[9, 3] = -inv_I_b
+        #B[9, 2] = -inv_I_b
+        #B[9, 3] = -inv_I_b
 
         return B
 
