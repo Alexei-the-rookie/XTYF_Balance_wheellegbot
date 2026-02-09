@@ -9,42 +9,68 @@
     <sensor name="imu_sensor" type="imu">
       <always_on>true</always_on>
       <update_rate>100</update_rate>
+      <topic>imu</topic>
       <imu>
-        <noise>
-          <type>gaussian</type>
-          <rate>
-            <mean>0.0</mean>
-            <stddev>0.0002</stddev>
-            <bias_mean>0.0000075</bias_mean>
-            <bias_stddev>0.0000008</bias_stddev>
-          </rate>
-          <accel>
-            <mean>0.0</mean>
-            <stddev>0.017</stddev>
-            <bias_mean>0.1</bias_mean>
-            <bias_stddev>0.001</bias_stddev>
-          </accel>
-        </noise>
+        <angular_velocity>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+              <bias_mean>0.0000075</bias_mean>
+              <bias_stddev>0.0000008</bias_stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+              <bias_mean>0.0000075</bias_mean>
+              <bias_stddev>0.0000008</bias_stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.0002</stddev>
+              <bias_mean>0.0000075</bias_mean>
+              <bias_stddev>0.0000008</bias_stddev>
+            </noise>
+          </z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.017</stddev>
+              <bias_mean>0.1</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </x>
+          <y>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.017</stddev>
+              <bias_mean>0.1</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </y>
+          <z>
+            <noise type="gaussian">
+              <mean>0.0</mean>
+              <stddev>0.017</stddev>
+              <bias_mean>0.1</bias_mean>
+              <bias_stddev>0.001</bias_stddev>
+            </noise>
+          </z>
+        </linear_acceleration>
       </imu>
     </sensor>
   </gazebo>
+  <!-- Legacy IMU plugin removed -->
 
-  <!-- IMU ROS插件 -->
+  <!-- 里程计插件 (已注释，避免与 customized force control 冲突)
   <gazebo>
-    <plugin filename="libgz_sim_imu_system.so" name="imu_plugin">
-      <topicName>/imu</topicName>
-      <bodyName>base_link</bodyName>
-      <updateRateHZ>100.0</updateRateHZ>
-      <gravityZ>9.81</gravityZ>
-      <xyzOffset>0 0 0</xyzOffset>
-      <rpyOffset>0 0 0</rpyOffset>
-      <frameName>base_link</frameName>
-    </plugin>
-  </gazebo>
-
-  <!-- 里程计插件 -->
-  <gazebo>
-    <plugin filename="libgz_sim_diff_drive_system.so" name="diff_drive_controller">
+    <plugin filename="libgz_sim_diff_drive_system.so" name="gz::sim::systems::DiffDrive">
       <ros>
         <namespace>/wheel_leg_robot</namespace>
       </ros>
@@ -60,5 +86,6 @@
       <robot_base_frame>base_link</robot_base_frame>
     </plugin>
   </gazebo>
+  -->
 
 </robot>

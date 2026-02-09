@@ -7,6 +7,7 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+from launch_ros.parameter_descriptions import ParameterValue
 
 def generate_launch_description():
     pkg_share = FindPackageShare('balance_bot').find('balance_bot')
@@ -30,7 +31,7 @@ def generate_launch_description():
         executable='robot_state_publisher',
         parameters=[{
             'use_sim_time': True,
-            'robot_description': Command(['xacro ', urdf_file])
+            'robot_description': ParameterValue(Command(['xacro ', urdf_file]), value_type=str)
         }]
     )
 
@@ -56,6 +57,31 @@ def generate_launch_description():
         arguments=['joint_state_broadcaster']
     )
 
+    controller_spawners = []
+    controllers = [
+        'left_hip_joint_controller',
+        'left_knee_joint_controller',
+        'left_wheel_joint_controller',
+        'right_hip_joint_controller',
+        'right_knee_joint_controller',
+        'right_wheel_joint_controller'
+    ]
+
+    for controller in controllers:
+        controller_spawners.append(Node(
+            package='controller_manager',
+            executable='spawner',
+            arguments=[controller]
+        ))
+
+    # Bridge Gazebo IMU to ROS
+    bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=['/imu@sensor_msgs/msg/Imu@gz.msgs.IMU'],
+        output='screen'
+    )
+
     # 使用纯LQR控制器
     lqr_controller = Node(
         package='balance_bot',
@@ -78,6 +104,8 @@ def generate_launch_description():
         joint_state_publisher,
         spawn_entity,
         controller_manager,
+        *controller_spawners,
+        bridge,
         lqr_controller,
         teleop_twist_keyboard,
     ])

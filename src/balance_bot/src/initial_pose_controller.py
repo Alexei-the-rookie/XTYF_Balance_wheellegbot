@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float64
+from std_msgs.msg import Float64, Float64MultiArray
 from sensor_msgs.msg import Imu, JointState
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
@@ -110,13 +110,13 @@ class PureLQRController(Node):
         self.init_lqr()
 
         # 创建发布器
-        self.left_hip_pub = self.create_publisher(Float64, '/left_hip_joint/command', 10)
-        self.left_knee_pub = self.create_publisher(Float64, '/left_knee_joint/command', 10)
-        self.left_wheel_pub = self.create_publisher(Float64, '/left_wheel_joint/command', 10)
+        self.left_hip_pub = self.create_publisher(Float64MultiArray, '/left_hip_joint_controller/commands', 10)
+        self.left_knee_pub = self.create_publisher(Float64MultiArray, '/left_knee_joint_controller/commands', 10)
+        self.left_wheel_pub = self.create_publisher(Float64MultiArray, '/left_wheel_joint_controller/commands', 10)
 
-        self.right_hip_pub = self.create_publisher(Float64, '/right_hip_joint/command', 10)
-        self.right_knee_pub = self.create_publisher(Float64, '/right_knee_joint/command', 10)
-        self.right_wheel_pub = self.create_publisher(Float64, '/right_wheel_joint/command', 10)
+        self.right_hip_pub = self.create_publisher(Float64MultiArray, '/right_hip_joint_controller/commands', 10)
+        self.right_knee_pub = self.create_publisher(Float64MultiArray, '/right_knee_joint_controller/commands', 10)
+        self.right_wheel_pub = self.create_publisher(Float64MultiArray, '/right_wheel_joint_controller/commands', 10)
 
         # 创建订阅器
         self.imu_sub = self.create_subscription(
@@ -272,12 +272,13 @@ class PureLQRController(Node):
 
         # 机体俯仰动力学 (倒立摆)
         # d(dtheta_b) ~ g/L * theta_b
-        gravity_term = 9.81 / 0.17 # 近似质心高度
+        gravity_term = self.g / self.target_height # 使用目标高度作为倒立摆长度估计
         A[9, 8] = gravity_term
 
         # 腿部摆动动力学 (复摆)
         # d(dtheta_leg) ~ -g/L_leg * theta_leg
-        leg_swing_term = -9.81 / 0.1
+        # 使用腿部质心距离
+        leg_swing_term = -self.g / self.l_com_to_hip
         A[1, 0] = leg_swing_term
         A[3, 2] = leg_swing_term
 
@@ -336,9 +337,9 @@ class PureLQRController(Node):
         # 俯仰角 (pitch)
         sinp = 2 * (w * y - z * x)
         if abs(sinp) >= 1:
-            self.pitch = math.copysign(math.pi / 2, sinp)
+            self.theta_b = math.copysign(math.pi / 2, sinp)
         else:
-            self.pitch = math.asin(sinp)
+            self.theta_b = math.asin(sinp)
 
         # 偏航角 (yaw)
         siny_cosp = 2 * (w * z + x * y)
@@ -364,8 +365,8 @@ class PureLQRController(Node):
             self.dtheta_wl,     # [5] 左轮角速度
             self.theta_wr,      # [6] 右轮角度
             self.dtheta_wr,     # [7] 右轮角速度
-            self.pitch,         # [8] 机体俯仰角 (theta_b)
-            self.pitch_vel      # [9] 机体俯仰角速度
+            self.theta_b,       # [8] 机体俯仰角 (theta_b)
+            self.dtheta_b       # [9] 机体俯仰角速度
         ])
 
     def update_virtual_leg_states(self):
@@ -460,18 +461,13 @@ class PureLQRController(Node):
 
             # --- 高度控制 (独立于LQR) ---
             # 施加沿虚拟腿方向的力 F
-            # 目标高度 L_ref = 0.176 (根据题目要求)
-            L_ref = 0.35 # 腿长可能需要更长才能站立，题目初始高度0.176是相对较低的
-                         # 如果按题目0.176配置，则设为0.176
-                         # 但注意初始配置计算中 cos(theta)=0.176/0.259
-                         # 其实0.176是"髋关节距轮子轴 高"，即垂直高度。L是直线距离。
-                         # 在直立状态 L ~= Height.
-            L_ref = 0.176
+            # 目标高度 (根据题目要求)
+            L_ref = self.target_height
 
             # 高度PD控制 + 重力补偿
             kp_h = 1000.0
             kd_h = 50.0
-            F_gravity = self.m_b * 9.81 / 2.0 / math.cos(self.theta_bl) # 简单分配
+            F_gravity = self.m_b * self.g / 2.0 / math.cos(self.theta_bl) # 简单分配
 
             F_l = kp_h * (L_ref - self.L_virtual_l) + kd_h * (0 - self.DL_virtual_l) + F_gravity
             F_r = kp_h * (L_ref - self.L_virtual_r) + kd_h * (0 - self.DL_virtual_r) + F_gravity
@@ -564,14 +560,14 @@ class PureLQRController(Node):
         # 调试信息
         if int(self.get_clock().now().nanoseconds / 1e9) % 2 == 0: # 提高日志频率
             self.get_logger().info(
-                f"Pitch: {math.degrees(self.pitch):.1f}deg | "
+                f"Pitch: {math.degrees(self.theta_b):.1f}deg | "
                 f"Torques(Nm) -> W_L:{self.cmd_wheel_torque_l:.2f} W_R:{self.cmd_wheel_torque_r:.2f} "
                 f"H_L:{self.cmd_hip_torque_l:.2f} K_L:{self.cmd_knee_torque_l:.2f}"
             )
 
     def publish_joint_command(self, publisher, value):
-        msg = Float64()
-        msg.data = float(value)
+        msg = Float64MultiArray()
+        msg.data = [float(value)]
         publisher.publish(msg)
 
 def main():

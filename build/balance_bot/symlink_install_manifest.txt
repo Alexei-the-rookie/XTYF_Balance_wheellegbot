@@ -3,6 +3,7 @@
 /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/bot_with_sensors.xacro
 /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/leg_initial_pose_module.xacro
 /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/urdf/wheel_leg_initial_pose.xacro
+/home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/config/controllers.yaml
 /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/package_run_dependencies/balance_bot
 /home/nuaawzh/dev_ws/install/balance_bot/share/ament_index/resource_index/parent_prefix_path/balance_bot
 /home/nuaawzh/dev_ws/install/balance_bot/share/balance_bot/environment/ament_prefix_path.sh
