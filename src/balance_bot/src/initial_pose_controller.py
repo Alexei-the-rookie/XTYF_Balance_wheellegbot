@@ -104,11 +104,11 @@ class PureLQRController(Node):
             self.imu_callback,
             10)
 
-        self.odom_sub = self.create_subscription(
-            Odometry,
-            '/wheel_leg_robot/odometry',
-            self.odom_callback,
-            10)
+        #self.odom_sub = self.create_subscription(
+        #    Odometry,
+        #    '/wheel_leg_robot/odometry',
+        #    self.odom_callback,
+        #    10)
 
         # 关节状态订阅器
         self.joint_state_sub = self.create_subscription(
