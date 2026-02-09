@@ -51,13 +51,25 @@ def generate_launch_description():
         ]
     )
 
-    controller_manager = Node(
-        package='controller_manager',
-        executable='spawner',
-        arguments=['joint_state_broadcaster']
+    # Bridge Gazebo IMU and Clock to ROS
+    # Bridge both /clock and /world/empty/clock to ensure we catch the sim time
+    bridge = Node(
+        package='ros_gz_bridge',
+        executable='parameter_bridge',
+        arguments=[
+            '/imu@sensor_msgs/msg/Imu[gz.msgs.IMU',
+            '/clock@rosgraph_msgs/msg/Clock[gz.msgs.Clock'
+        ],
+        output='screen'
     )
 
-    controller_spawners = []
+    # Event handler to spawn controllers after the robot is spawned
+    from launch.actions import RegisterEventHandler
+    from launch.event_handlers import OnProcessExit
+
+    # Filter out joint_state_broadcaster from controllers list to start it first
+    # (Actually it's fine to start with others, but let's keep logic simple)
+
     controllers = [
         'left_hip_joint_controller',
         'left_knee_joint_controller',
@@ -67,26 +79,46 @@ def generate_launch_description():
         'right_wheel_joint_controller'
     ]
 
-    for controller in controllers:
-        controller_spawners.append(Node(
+    # Create the list of spawn actions
+    spawn_controllers = []
+
+    # Broadcast joint states
+    spawn_controllers.append(
+        Node(
             package='controller_manager',
             executable='spawner',
-            arguments=[controller]
-        ))
+            arguments=['joint_state_broadcaster'],
+            parameters=[{'use_sim_time': True}],
+            output='screen'
+        )
+    )
 
-    # Bridge Gazebo IMU to ROS
-    bridge = Node(
-        package='ros_gz_bridge',
-        executable='parameter_bridge',
-        arguments=['/imu@sensor_msgs/msg/Imu@gz.msgs.IMU'],
-        output='screen'
+    # Spawn other controllers
+    for controller in controllers:
+        spawn_controllers.append(
+            Node(
+                package='controller_manager',
+                executable='spawner',
+                arguments=[controller],
+                parameters=[{'use_sim_time': True}],
+                output='screen'
+            )
+        )
+
+    # Delay start of controllers until "create" (spawn_entity) finishes
+    delay_controllers_after_spawn = RegisterEventHandler(
+        event_handler=OnProcessExit(
+            target_action=spawn_entity,
+            on_exit=spawn_controllers
+        )
     )
 
     # 使用纯LQR控制器
     lqr_controller = Node(
         package='balance_bot',
         executable='initial_pose_controller.py',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': True}]
     )
 
     # 键盘控制（可选）
@@ -103,9 +135,8 @@ def generate_launch_description():
         robot_state_publisher,
         joint_state_publisher,
         spawn_entity,
-        controller_manager,
-        *controller_spawners,
         bridge,
+        delay_controllers_after_spawn,
         lqr_controller,
         teleop_twist_keyboard,
     ])

@@ -165,40 +165,40 @@ class PureLQRController(Node):
             # 左腿
             if 'left_hip_joint' in name_map:
                 idx = name_map['left_hip_joint']
-                self.theta_bl_joint_pos = msg.position[idx]
-                self.dtheta_bl_joint_vel = msg.velocity[idx]
-                self.tau_hip_l = msg.effort[idx]
+                if len(msg.position) > idx: self.theta_bl_joint_pos = msg.position[idx]
+                if len(msg.velocity) > idx: self.dtheta_bl_joint_vel = msg.velocity[idx]
+                if len(msg.effort) > idx:   self.tau_hip_l = msg.effort[idx]
 
             if 'left_knee_joint' in name_map:
                 idx = name_map['left_knee_joint']
-                self.theta_kl = msg.position[idx]
-                self.dtheta_kl = msg.velocity[idx]
-                self.tau_knee_l = msg.effort[idx]
+                if len(msg.position) > idx: self.theta_kl = msg.position[idx]
+                if len(msg.velocity) > idx: self.dtheta_kl = msg.velocity[idx]
+                if len(msg.effort) > idx:   self.tau_knee_l = msg.effort[idx]
 
             if 'left_wheel_joint' in name_map:
                 idx = name_map['left_wheel_joint']
-                self.theta_wl = msg.position[idx]
-                self.dtheta_wl = msg.velocity[idx]
-                self.tau_wheel_l = msg.effort[idx]
+                if len(msg.position) > idx: self.theta_wl = msg.position[idx]
+                if len(msg.velocity) > idx: self.dtheta_wl = msg.velocity[idx]
+                if len(msg.effort) > idx:   self.tau_wheel_l = msg.effort[idx]
 
             # 右腿
             if 'right_hip_joint' in name_map:
                 idx = name_map['right_hip_joint']
-                self.theta_br_joint_pos = msg.position[idx]
-                self.dtheta_br_joint_vel = msg.velocity[idx]
-                self.tau_hip_r = msg.effort[idx]
+                if len(msg.position) > idx: self.theta_br_joint_pos = msg.position[idx]
+                if len(msg.velocity) > idx: self.dtheta_br_joint_vel = msg.velocity[idx]
+                if len(msg.effort) > idx:   self.tau_hip_r = msg.effort[idx]
 
             if 'right_knee_joint' in name_map:
                 idx = name_map['right_knee_joint']
-                self.theta_kr = msg.position[idx]
-                self.dtheta_kr = msg.velocity[idx]
-                self.tau_knee_r = msg.effort[idx]
+                if len(msg.position) > idx: self.theta_kr = msg.position[idx]
+                if len(msg.velocity) > idx: self.dtheta_kr = msg.velocity[idx]
+                if len(msg.effort) > idx:   self.tau_knee_r = msg.effort[idx]
 
             if 'right_wheel_joint' in name_map:
                 idx = name_map['right_wheel_joint']
-                self.theta_wr = msg.position[idx]
-                self.dtheta_wr = msg.velocity[idx]
-                self.tau_wheel_r = msg.effort[idx]
+                if len(msg.position) > idx: self.theta_wr = msg.position[idx]
+                if len(msg.velocity) > idx: self.dtheta_wr = msg.velocity[idx]
+                if len(msg.effort) > idx:   self.tau_wheel_r = msg.effort[idx]
 
         except Exception as e:
             self.get_logger().error(f"Joint State Parse Error: {e}")

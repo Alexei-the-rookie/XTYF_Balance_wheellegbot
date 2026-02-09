@@ -8,32 +8,37 @@
   <gazebo reference="base_link">
     <sensor name="imu_sensor" type="imu">
       <always_on>true</always_on>
-      <update_rate>100</update_rate>
-      <topic>imu</topic>
-      <imu>
+      <update_rate>1000</update_rate>
+      <!-- Gazebo内部发布IMU数据的话题，桥接会连接到这里 -->
+      <topic>/imu</topic>
+      <plugin filename="libgz-sim-imu-system.so" name="gz::sim::systems::Imu">
+        <!-- 注意：这里的是插件内部参数，与你上面的<imu>标签是两套东西。
+             下面的噪声配置是为插件准备的，格式也不同。-->
+        <topic>/imu</topic>
+        <noise type="gaussian">
+          <mean>0.0</mean>
+          <stddev>0.0002</stddev>
+        </noise>
+        <!-- 为了快速验证，你可以先注释掉下面详细的噪声配置，
+             等传感器能工作后再来细化。 -->
+        <!--
         <angular_velocity>
           <x>
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.0002</stddev>
-              <bias_mean>0.0000075</bias_mean>
-              <bias_stddev>0.0000008</bias_stddev>
             </noise>
           </x>
           <y>
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.0002</stddev>
-              <bias_mean>0.0000075</bias_mean>
-              <bias_stddev>0.0000008</bias_stddev>
             </noise>
           </y>
           <z>
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.0002</stddev>
-              <bias_mean>0.0000075</bias_mean>
-              <bias_stddev>0.0000008</bias_stddev>
             </noise>
           </z>
         </angular_velocity>
@@ -42,28 +47,23 @@
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.017</stddev>
-              <bias_mean>0.1</bias_mean>
-              <bias_stddev>0.001</bias_stddev>
             </noise>
           </x>
           <y>
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.017</stddev>
-              <bias_mean>0.1</bias_mean>
-              <bias_stddev>0.001</bias_stddev>
             </noise>
           </y>
           <z>
             <noise type="gaussian">
               <mean>0.0</mean>
               <stddev>0.017</stddev>
-              <bias_mean>0.1</bias_mean>
-              <bias_stddev>0.001</bias_stddev>
             </noise>
           </z>
         </linear_acceleration>
-      </imu>
+        -->
+      </plugin>
     </sensor>
   </gazebo>
   <!-- Legacy IMU plugin removed -->

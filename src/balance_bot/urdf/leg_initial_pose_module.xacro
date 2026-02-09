@@ -49,7 +49,7 @@
       <child link="${prefix}_thigh"/>
       <origin xyz="${x} ${y} ${z}" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit lower="-3.0" upper="1.0" effort="30.0" velocity="3.0"/>
+      <limit lower="-3.0" upper="1.0" effort="30.0" velocity="10.0"/>
       <!-- 设置初始位置 -->
       <xacro:if value="${mirror}">
         <origin rpy="0 ${initial_hip_angle} 0" xyz="${x} ${y} ${z}"/>
@@ -89,7 +89,7 @@
       <child link="${prefix}_shank"/>
       <origin xyz="0 0 ${-thigh_length}" rpy="0 0 0"/>
       <axis xyz="0 1 0"/>
-      <limit lower="0.0" upper="3.0" effort="25.0" velocity="3.0"/>
+      <limit lower="0.0" upper="3.0" effort="25.0" velocity="10.0"/>
       <!-- 设置初始位置 -->
       <xacro:if value="${mirror}">
         <origin rpy="0 ${initial_knee_angle} 0" xyz="0 0 ${-thigh_length}"/>
@@ -118,12 +118,12 @@
       </collision>
       <inertial>
         <mass value="0.982"/>
-        <!-- Adjusted inertia for Y-axis rotation: iyy is now the axis of rotation -->
         <inertia ixx="0.002" ixy="0.0" ixz="0.0" iyy="0.001" iyz="0.0" izz="0.002"/>
       </inertial>
     </link>
 
     <!-- 轮子与腿的关节 (无刷电机) -->
+    <!-- 修正轮子轴向，假设原方向错误 -->
     <joint name="${prefix}_wheel_joint" type="continuous">
       <parent link="${prefix}_shank"/>
       <child link="${prefix}_wheel"/>
