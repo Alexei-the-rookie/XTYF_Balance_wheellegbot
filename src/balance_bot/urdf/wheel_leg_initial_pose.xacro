@@ -11,6 +11,12 @@
 
   <!-- 机器人主体 -->
   <link name="base_link">
+    <!-- Body Parameters as per user request:
+         Mass: 15.0 kg
+         CoM: 0.0 0.0 0.05 m
+         Inertia (Pitch): 0.1125 kg*m^2
+         Inertia (Yaw): 0.05 kg*m^2
+    -->
     <visual>
       <geometry>
         <box size="${body_length} ${body_width} ${body_height}"/>
@@ -58,7 +64,7 @@
 
   <!-- Gazebo ROS控制插件 -->
   <gazebo>
-    <plugin name="gazebo_ros_control" filename="libgazebo_ros_control.so">
+    <plugin name="gazebo_ros_control" filename="libgz_ros2_control-system.so">
       <robotNamespace>/wheel_leg_initial_pose</robotNamespace>
     </plugin>
   </gazebo>

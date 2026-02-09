@@ -24,6 +24,7 @@ class PureLQRController(Node):
         self.dtheta_wr = 0.0      # 右腿角速度
         self.theta_b = 0.0           # 机体倾斜角 [rad]
         self.dtheta_b = 0.0       # 机体倾斜角速度
+        self.roll = 0.0           # 机体翻滚角
 
         # 膝关节状态
         self.theta_kl = 0.0      # 左膝关节角
@@ -67,19 +68,39 @@ class PureLQRController(Node):
         self.R = None  # 控制权重矩阵 (6x6)
         self.K = None  # LQR增益矩阵 (6x8)
 
-        # 系统物理参数
+        # 系统物理参数 (System parameters updated)
         self.m_b = 15.0               # 机体质量 [kg]
-        self.g = 9.81                # 重力加速度 [m/s²]
+        self.g = 9.81                 # 重力加速度 [m/s²]
         self.R_w = 0.058              # 轮子半径 [m]
-        self.I_b = 0.1125            # 机体转动惯量 [kg·m²]
-        self.I_w = 0.001          # 轮子转动惯量 [kg·m²]
-        self.I_l = 0.018            # 腿转动惯量 [kg·m²]
-        self.leg_length = 0.17       # 腿长度(经过计算得到) [m]
-        self.L = 0.17                 # 腿重心到轮子的长度 [m]
-        self.L_m = 0.087               # 腿重心到髋关节的长度 [m]
-        self.m_w = 0.985           # 轮子重量 [kg]
-        self.m_l = 2.0               # 单腿重量 [kg]
-        self.I_z = 0.02            # 机体偏航转动惯量 [kg·m²]
+        self.I_b = 0.1125             # 机体对质心俯仰转动惯量 [kg·m²]
+        self.I_b_yaw = 0.05           # 机体偏航转动惯量 [kg·m²]
+        self.I_w = 0.001              # 轮子转动惯量 [kg·m²]
+        self.I_l = 0.018              # 腿转动惯量 [kg·m²]
+
+        # 腿部参数
+        self.l_thigh = 0.230          # 大腿长 [m]
+        self.l_shank = 0.287          # 小腿长 [m]
+        self.l_com_to_hip = 0.087     # 腿部质心距机体(髋) [m]
+        self.l_com_to_wheel = 0.172   # 腿部质心距轮轴 [m]
+
+        # 虚拟腿相关
+        # 髋关节距轮子轴高度 0.176 (用于目标设定)
+        self.target_height = 0.176
+        self.half_wheel_track = 0.175 # 二分之一轮距 [m]
+
+        self.m_w = 0.982              # 轮子质量 [kg]
+        self.m_l = 2.047              # 腿部质量 [kg]
+
+        # Initialize joint variables
+        self.theta_bl_joint_pos = 0.0
+        self.dtheta_bl_joint_vel = 0.0
+        self.theta_kl = 0.0
+        self.dtheta_kl = 0.0
+
+        self.theta_br_joint_pos = 0.0
+        self.dtheta_br_joint_vel = 0.0
+        self.theta_kr = 0.0
+        self.dtheta_kr = 0.0
 
         # 控制限制
         self.max_wheel_velocity = 10.0   # 最大轮子速度 [rad/s]
@@ -128,6 +149,58 @@ class PureLQRController(Node):
         self.control_timer = self.create_timer(0.02, self.control_loop)  # 50Hz控制频率
 
         self.get_logger().info("纯LQR轮腿机器人控制器已启动")
+
+    def cmd_vel_callback(self, msg):
+        """处理速度控制命令"""
+        # 暂时没用到，留空或实现基本逻辑
+        pass
+
+    def joint_state_callback(self, msg):
+        """处理关节状态数据"""
+        try:
+            # 建立映射以应对不同的joint顺序
+            name_map = {name: i for i, name in enumerate(msg.name)}
+
+            # 左腿
+            if 'left_hip_joint' in name_map:
+                idx = name_map['left_hip_joint']
+                self.theta_bl_joint_pos = msg.position[idx]
+                self.dtheta_bl_joint_vel = msg.velocity[idx]
+                self.tau_hip_l = msg.effort[idx]
+
+            if 'left_knee_joint' in name_map:
+                idx = name_map['left_knee_joint']
+                self.theta_kl = msg.position[idx]
+                self.dtheta_kl = msg.velocity[idx]
+                self.tau_knee_l = msg.effort[idx]
+
+            if 'left_wheel_joint' in name_map:
+                idx = name_map['left_wheel_joint']
+                self.theta_wl = msg.position[idx]
+                self.dtheta_wl = msg.velocity[idx]
+                self.tau_wheel_l = msg.effort[idx]
+
+            # 右腿
+            if 'right_hip_joint' in name_map:
+                idx = name_map['right_hip_joint']
+                self.theta_br_joint_pos = msg.position[idx]
+                self.dtheta_br_joint_vel = msg.velocity[idx]
+                self.tau_hip_r = msg.effort[idx]
+
+            if 'right_knee_joint' in name_map:
+                idx = name_map['right_knee_joint']
+                self.theta_kr = msg.position[idx]
+                self.dtheta_kr = msg.velocity[idx]
+                self.tau_knee_r = msg.effort[idx]
+
+            if 'right_wheel_joint' in name_map:
+                idx = name_map['right_wheel_joint']
+                self.theta_wr = msg.position[idx]
+                self.dtheta_wr = msg.velocity[idx]
+                self.tau_wheel_r = msg.effort[idx]
+
+        except Exception as e:
+            self.get_logger().error(f"Joint State Parse Error: {e}")
 
     def init_lqr(self):
         """初始化LQR控制器参数"""
@@ -255,6 +328,11 @@ class PureLQRController(Node):
         w = msg.orientation.w
 
         # 四元数到欧拉角转换
+        # 翻滚角 (roll)
+        sinr_cosp = 2 * (w * x + y * z)
+        cosr_cosp = 1 - 2 * (x * x + y * y)
+        self.roll = math.atan2(sinr_cosp, cosr_cosp)
+
         # 俯仰角 (pitch)
         sinp = 2 * (w * y - z * x)
         if abs(sinp) >= 1:

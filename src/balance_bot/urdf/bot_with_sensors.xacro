@@ -31,7 +31,7 @@
 
   <!-- IMU ROS插件 -->
   <gazebo>
-    <plugin filename="libgazebo_ros_imu_sensor.so" name="imu_plugin">
+    <plugin filename="libgz_sim_imu_system.so" name="imu_plugin">
       <topicName>/imu</topicName>
       <bodyName>base_link</bodyName>
       <updateRateHZ>100.0</updateRateHZ>
@@ -44,7 +44,7 @@
 
   <!-- 里程计插件 -->
   <gazebo>
-    <plugin filename="libgazebo_ros_diff_drive.so" name="diff_drive_controller">
+    <plugin filename="libgz_sim_diff_drive_system.so" name="diff_drive_controller">
       <ros>
         <namespace>/wheel_leg_robot</namespace>
       </ros>
