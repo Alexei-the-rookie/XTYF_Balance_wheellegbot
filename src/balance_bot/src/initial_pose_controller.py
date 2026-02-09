@@ -2,7 +2,7 @@
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float64
-from sensor_msgs.msg import Imu
+from sensor_msgs.msg import Imu, JointState
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 import math
@@ -24,6 +24,25 @@ class PureLQRController(Node):
         self.dtheta_wr = 0.0      # 右腿角速度
         self.theta_b = 0.0           # 机体倾斜角 [rad]
         self.dtheta_b = 0.0       # 机体倾斜角速度
+
+        # 膝关节状态
+        self.theta_kl = 0.0      # 左膝关节角
+        self.dtheta_kl = 0.0     # 左膝关节角速度
+        self.theta_kr = 0.0      # 右膝关节角
+        self.dtheta_kr = 0.0     # 右膝关节角速度
+
+        # 传感器观测数据 (力矩)
+        self.tau_hip_l = 0.0     # 左髋关节观测力矩
+        self.tau_hip_r = 0.0     # 右髋关节观测力矩
+        self.tau_knee_l = 0.0    # 左膝关节观测力矩
+        self.tau_knee_r = 0.0    # 右膝关节观测力矩
+        self.tau_wheel_l = 0.0   # 左轮观测力矩
+        self.tau_wheel_r = 0.0   # 右轮观测力矩
+
+        # 传感器观测数据 (IMU加速度)
+        self.acc_x = 0.0
+        self.acc_y = 0.0
+        self.acc_z = 0.0
 
         # 参考状态
         self.theta_bl_ref = 0.0                # 左侧腿角
@@ -49,15 +68,15 @@ class PureLQRController(Node):
         self.K = None  # LQR增益矩阵 (6x8)
 
         # 系统物理参数
-        self.m_b = 22.0               # 机体质量 [kg]
+        self.m_b = 15.0               # 机体质量 [kg]
         self.g = 9.81                # 重力加速度 [m/s²]
         self.R_w = 0.058              # 轮子半径 [m]
-        self.I_b = 0.1            # 机体转动惯量 [kg·m²]
-        self.I_w = 0.01          # 轮子转动惯量 [kg·m²]
-        self.I_l = 0.02            # 腿转动惯量 [kg·m²]
-        ##self.leg_length = 0.45       # 腿长度(经过计算得到) [m]
-        self.L = 0.2                 # 腿重心到轮子的长度 [m]
-        self.L_m = 0.3               # 腿重心到髋关节的长度 [m]
+        self.I_b = 0.1125            # 机体转动惯量 [kg·m²]
+        self.I_w = 0.001          # 轮子转动惯量 [kg·m²]
+        self.I_l = 0.018            # 腿转动惯量 [kg·m²]
+        self.leg_length = 0.17       # 腿长度(经过计算得到) [m]
+        self.L = 0.17                 # 腿重心到轮子的长度 [m]
+        self.L_m = 0.087               # 腿重心到髋关节的长度 [m]
         self.m_w = 0.985           # 轮子重量 [kg]
         self.m_l = 2.0               # 单腿重量 [kg]
         self.I_z = 0.02            # 机体偏航转动惯量 [kg·m²]
@@ -91,6 +110,13 @@ class PureLQRController(Node):
             self.odom_callback,
             10)
 
+        # 关节状态订阅器
+        self.joint_state_sub = self.create_subscription(
+            JointState,
+            '/joint_states',
+            self.joint_state_callback,
+            10)
+
         # 创建速度命令订阅器
         self.cmd_vel_sub = self.create_subscription(
             Twist,
@@ -105,80 +131,123 @@ class PureLQRController(Node):
 
     def init_lqr(self):
         """初始化LQR控制器参数"""
-        # 状态向量: [theta, theta_dot, x_pos, x_vel, phi, phi_dot]
-        # 控制向量: [T, T_p]
+        # 状态向量 x (10维):
+        # [0] theta_bl      (左虚拟腿角)
+        # [1] dtheta_bl     (左虚拟腿角速度)
+        # [2] theta_br      (右虚拟腿角)
+        # [3] dtheta_br     (右虚拟腿角速度)
+        # [4] theta_wl      (左轮角度)
+        # [5] dtheta_wl     (左轮角速度)
+        # [6] theta_wr      (右轮角度)
+        # [7] dtheta_wr     (右轮角速度)
+        # [8] theta_b       (机体俯仰角)
+        # [9] dtheta_b      (机体俯仰角速度)
 
-        # 状态权重矩阵 Q (10x10)
-        # 对角元素分别对应各个状态的权重
-        self.Q = np.diag([
-            80.0,   # theta - 平衡最重要
-            25.0,   # theta_dot - 俯仰角速度控制
-            0.5,    # x_pos - 位置控制权重较低
-            2.0,    # x_vel - 速度控制中等权重
-            8.0,    # phi - 腿角控制
-            3.0     # phi_dot - 腿角速度控制
-        ])
+        # 控制向量 u (4维):
+        # [0] T_lw_l        (左轮力矩)
+        # [1] T_lw_r        (右轮力矩)
+        # [2] T_bl_l        (左腿虚拟转动力矩)
+        # [3] T_bl_r        (右腿虚拟转动力矩)
 
-        # 控制权重矩阵 R (4x4)
+        # 1. 状态权重矩阵 Q (10x10)
+        q_diag = [
+            10.0, 1.0,    # 左腿虚拟角
+            10.0, 1.0,    # 右腿虚拟角
+            1.0,  0.5,    # 左轮
+            1.0,  0.5,    # 右轮
+            100.0, 10.0   # 机体俯仰 (平衡最重要)
+        ]
+        self.Q = np.diag(q_diag)
+
+        # 2. 控制权重矩阵 R (4x4)
         self.R = np.diag([
-            0.1,    # T - 轮子力矩控制权重较低
-            0.1,    # T - 轮子力矩控制权重较低
-            1.0,    # T_p - 髋关节力矩控制权重较高
-            1.0     # T_p - 髋关节力矩控制权重较高
+            5.0, 5.0,     # 轮子力矩
+            3.0, 3.0      # 虚拟腿转动力矩
         ])
 
-        # 构建系统矩阵 A (10x10)
-        # 这是简化的线性化模型，实际应用中需要通过系统辨识得到
+        # 3. 构建系统矩阵 A (10x10)
         A = self.build_system_matrix()
 
-        # 构建控制矩阵 B (10x4)
+        # 4. 构建控制矩阵 B (10x4)
         B = self.build_control_matrix()
 
-        # 求解连续时间代数Riccati方程
+        # 5. 求解连续时间代数Riccati方程
         try:
             P = solve_continuous_are(A, B, self.Q, self.R)
             self.K = np.linalg.inv(self.R) @ B.T @ P
             self.get_logger().info("LQR增益矩阵计算成功")
-            self.get_logger().info(f"K矩阵形状: {self.K.shape}")
+            self.get_logger().info(f"K矩阵维度: {self.K.shape} (应为 4x10)")
         except Exception as e:
             self.get_logger().error(f"LQR增益计算失败: {e}")
-            # 使用经验PD控制器作为备用
             self.K = None
 
     def build_system_matrix(self):
-        """构建系统矩阵 A"""
-        # 简化的线性化模型，在平衡点附近
-        #[theta, theta_dot, x_pos, x_vel, phi, phi_dot]
+        """构建系统矩阵 A (10x10)"""
+        # 简化模型：双轮倒立摆 + 腿部摆动
         A = np.zeros((10, 10))
 
-        # 位置和速度关系
-        A[0, 1] = 1    # theta_dot = theta_dot
-        A[1, 0] = 1    # A_1 计算
-        A[1, 4] = 1    # A_2 计算
-        A[2, 3] = 1    # x_dot = x_vel
-        A[3, 0] = 1    # A_3 计算
-        A[3, 4] = 1    # A_4 计算
-        A[4, 5] = 1    # phi_dot = phi_dot
-        A[5, 0] = 1    # A_5 计算
-        A[5, 4] = 1    # A_6 计算
+        # 运动学关系: angle_dot = angle_velocity
+        A[0, 1] = 1.0  # d(theta_bl) = dtheta_bl
+        A[2, 3] = 1.0  # d(theta_br) = dtheta_br
+        A[4, 5] = 1.0  # d(theta_wl) = dtheta_wl
+        A[6, 7] = 1.0  # d(theta_wr) = dtheta_wr
+        A[8, 9] = 1.0  # d(theta_b)  = dtheta_b
+
+        # 动力学近似
+        # 这是一个高度简化的线性化模型，用于LQR求解
+        # 实际上应该基于更精确的动力学方程
+
+        # 机体俯仰动力学 (倒立摆)
+        # d(dtheta_b) ~ g/L * theta_b
+        gravity_term = 9.81 / 0.17 # 近似质心高度
+        A[9, 8] = gravity_term
+
+        # 腿部摆动动力学 (复摆)
+        # d(dtheta_leg) ~ -g/L_leg * theta_leg
+        leg_swing_term = -9.81 / 0.1
+        A[1, 0] = leg_swing_term
+        A[3, 2] = leg_swing_term
 
         return A
 
     def build_control_matrix(self):
-        """构建控制矩阵 B"""
+        """构建控制矩阵 B (10x4)"""
+        # 控制输入: [T_lw_l, T_lw_r, T_bl_l, T_bl_r]
+        # 状态: [th_bl, dth_bl, th_br, dth_br, th_wl, dth_wl, th_wr, dth_wr, th_b, dth_b]
+
         B = np.zeros((10, 4))
 
-        # 控制输入对状态的影响
-        B[1, 0] = 1    # B_1 计算
-        B[1, 1] = 1    # B_2 计算
-        B[3, 0] = 1    # B_3 计算
-        B[3, 1] = 1    # B_4 计算
-        B[5, 0] = 1    # B_5 计算
-        B[5, 1] = 1    # B_6 计算
+        # 惯量参数近似
+        inv_I_w = 1.0 / self.I_w       # 轮子
+        inv_I_b = 1.0 / self.I_b       # 机体
+        inv_I_l = 1.0 / self.I_l       # 腿部
+
+        # 1. 轮子力矩 T_lw (Left at col 0, Right at col 1)
+        # 对轮子加速
+        B[5, 0] = inv_I_w
+        B[7, 1] = inv_I_w
+        # 对机体产生反作用力 (导致俯仰)
+        B[9, 0] = -inv_I_b
+        B[9, 1] = -inv_I_b
+
+        # 2. 腿部虚拟力矩 T_bl (Left at col 2, Right at col 3)
+        # 对腿部加速 (注意方向定义)
+        # T_bl 是髋关节施加在虚拟杆上的力矩
+        B[1, 2] = inv_I_l
+        B[3, 3] = inv_I_l
+        # 对机体产生反作用力
+        B[9, 2] = -inv_I_b
+        B[9, 3] = -inv_I_b
+
         return B
 
     def imu_callback(self, msg):
         """处理IMU数据"""
+        # 读取线加速度
+        self.acc_x = msg.linear_acceleration.x
+        self.acc_y = msg.linear_acceleration.y
+        self.acc_z = msg.linear_acceleration.z
+
         # 从四元数提取欧拉角
         x = msg.orientation.x
         y = msg.orientation.y
@@ -203,128 +272,223 @@ class PureLQRController(Node):
         self.pitch_vel = msg.angular_velocity.y
         self.yaw_vel = msg.angular_velocity.z
 
-    def odom_callback(self, msg):
-        """处理里程计数据"""
-        self.x_pos = msg.pose.pose.position.x
-        self.x_vel = msg.twist.twist.linear.x
-
-    def cmd_vel_callback(self, msg):
-        """处理速度命令"""
-        self.x_vel_ref = msg.linear.x
-
-        # 根据角速度命令调整参考偏航角
-        if abs(msg.angular.z) > 0.01:
-            self.yaw_ref += msg.angular.z * 0.02
-
     def get_state_vector(self):
-        """获取当前状态向量"""
+        """获取当前状态向量 (10维)"""
+        # 计算虚拟腿部状态
+        self.update_virtual_leg_states()
+
         return np.array([
-            self.x_pos - self.x_ref,
-            self.x_vel - self.x_vel_ref,
-            self.height - self.height_ref,
-            self.height_vel,
-            self.pitch - self.pitch_ref,
-            self.pitch_vel,
-            self.yaw - self.yaw_ref,
-            self.yaw_vel
+            self.theta_bl,      # [0] 左虚拟腿角
+            self.dtheta_bl,     # [1] 左虚拟腿角速度
+            self.theta_br,      # [2] 右虚拟腿角
+            self.dtheta_br,     # [3] 右虚拟腿角速度
+            self.theta_wl,      # [4] 左轮角度
+            self.dtheta_wl,     # [5] 左轮角速度
+            self.theta_wr,      # [6] 右轮角度
+            self.dtheta_wr,     # [7] 右轮角速度
+            self.pitch,         # [8] 机体俯仰角 (theta_b)
+            self.pitch_vel      # [9] 机体俯仰角速度
+        ])
+
+    def update_virtual_leg_states(self):
+        """计算虚拟腿状态 (正运动学)"""
+        # 几何参数
+        l1 = 0.23   # 大腿
+        l2 = 0.287  # 小腿
+
+        # 左腿
+        q1_l = self.theta_bl_joint_pos # 需要在joint_callback中读取真实髋关节角
+        q2_l = self.theta_kl           # 真实膝关节角
+
+        # 虚拟腿向量 (相对于髋关节)
+        # x = -l1*sin(q1) - l2*sin(q1+q2)
+        # z = -l1*cos(q1) - l2*cos(q1+q2)
+        x_l = -l1 * math.sin(q1_l) - l2 * math.sin(q1_l + q2_l)
+        z_l = -l1 * math.cos(q1_l) - l2 * math.cos(q1_l + q2_l)
+
+        self.L_virtual_l = math.sqrt(x_l**2 + z_l**2)
+        self.theta_bl = math.atan2(-x_l, -z_l) # 虚拟腿角度
+
+        # 雅可比计算用于速度
+        J_l = self.compute_virtual_jacobian(q1_l, q2_l)
+        dq_l = np.array([self.dtheta_bl_joint_vel, self.dtheta_kl])
+        v_virtual_l = J_l @ dq_l # [dL, dtheta]
+        self.DL_virtual_l = v_virtual_l[0]
+        self.dtheta_bl = v_virtual_l[1]
+
+        # 右腿
+        q1_r = self.theta_br_joint_pos
+        q2_r = self.theta_kr
+
+        x_r = -l1 * math.sin(q1_r) - l2 * math.sin(q1_r + q2_r)
+        z_r = -l1 * math.cos(q1_r) - l2 * math.cos(q1_r + q2_r)
+
+        self.L_virtual_r = math.sqrt(x_r**2 + z_r**2)
+        self.theta_br = math.atan2(-x_r, -z_r)
+
+        J_r = self.compute_virtual_jacobian(q1_r, q2_r)
+        dq_r = np.array([self.dtheta_br_joint_vel, self.dtheta_kr])
+        v_virtual_r = J_r @ dq_r
+        self.DL_virtual_r = v_virtual_r[0]
+        self.dtheta_br = v_virtual_r[1]
+
+    def compute_virtual_jacobian(self, q1, q2):
+        """计算从关节空间到虚拟腿空间的雅可比矩阵"""
+        l1 = 0.23
+        l2 = 0.287
+
+        s1 = math.sin(q1)
+        c1 = math.cos(q1)
+        s12 = math.sin(q1 + q2)
+        c12 = math.cos(q1 + q2)
+
+        x = -l1 * s1 - l2 * s12
+        z = -l1 * c1 - l2 * c12
+        L2 = x**2 + z**2
+        L = math.sqrt(L2)
+
+        # Partial derivatives of x, z w.r.t q1, q2
+        dxdq1 = -l1 * c1 - l2 * c12
+        dxdq2 = -l2 * c12
+        dzdq1 = l1 * s1 + l2 * s12
+        dzdq2 = l2 * s12
+
+        # L = sqrt(x^2 + z^2)
+        # dL/dq = (x*dx/dq + z*dz/dq) / L
+        dLdq1 = (x * dxdq1 + z * dzdq1) / L
+        dLdq2 = (x * dxdq2 + z * dzdq2) / L
+
+        # theta = atan2(-x, -z)
+        # dtheta/dq = (-(dz/dq)*(-x) - (-dx/dq)*(-z)) / L^2
+        #           = (x*dz/dq - z*dx/dq) / L^2
+        dthdq1 = (x * dzdq1 - z * dxdq1) / L2
+        dthdq2 = (x * dzdq2 - z * dxdq2) / L2
+
+        return np.array([
+            [dLdq1, dLdq2],
+            [dthdq1, dthdq2]
         ])
 
     def lqr_control(self, state):
-        """纯LQR控制计算"""
+        """纯LQR控制计算 + 虚拟力转换"""
         if self.K is not None:
-            # u = -K * x
-            control = -self.K @ state
+            # u = -K * x (4x1)
+            u = -self.K @ state
 
-            # 分离控制量
-            self.left_wheel_velocity = control[0]
-            self.right_wheel_velocity = control[1]
-            self.left_hip_torque = control[2]
-            self.right_hip_torque = control[3]
-            self.left_knee_torque = control[4]
-            self.right_knee_torque = control[5]
+            T_wheel_l = u[0]
+            T_wheel_r = u[1]
+            T_virtual_rot_l = u[2]
+            T_virtual_rot_r = u[3]
 
-            # 控制量限幅
-            self.left_wheel_velocity = np.clip(self.left_wheel_velocity,
-                                               -self.max_wheel_velocity,
-                                               self.max_wheel_velocity)
-            self.right_wheel_velocity = np.clip(self.right_wheel_velocity,
-                                                -self.max_wheel_velocity,
-                                                self.max_wheel_velocity)
+            # --- 高度控制 (独立于LQR) ---
+            # 施加沿虚拟腿方向的力 F
+            # 目标高度 L_ref = 0.176 (根据题目要求)
+            L_ref = 0.35 # 腿长可能需要更长才能站立，题目初始高度0.176是相对较低的
+                         # 如果按题目0.176配置，则设为0.176
+                         # 但注意初始配置计算中 cos(theta)=0.176/0.259
+                         # 其实0.176是"髋关节距轮子轴 高"，即垂直高度。L是直线距离。
+                         # 在直立状态 L ~= Height.
+            L_ref = 0.176
 
-            self.left_hip_torque = np.clip(self.left_hip_torque,
-                                           -self.max_torque,
-                                           self.max_torque)
-            self.right_hip_torque = np.clip(self.right_hip_torque,
-                                            -self.max_torque,
-                                            self.max_torque)
-            self.left_knee_torque = np.clip(self.left_knee_torque,
-                                            -self.max_torque,
-                                            self.max_torque)
-            self.right_knee_torque = np.clip(self.right_knee_torque,
-                                             -self.max_torque,
-                                             self.max_torque)
+            # 高度PD控制 + 重力补偿
+            kp_h = 1000.0
+            kd_h = 50.0
+            F_gravity = self.m_b * 9.81 / 2.0 / math.cos(self.theta_bl) # 简单分配
+
+            F_l = kp_h * (L_ref - self.L_virtual_l) + kd_h * (0 - self.DL_virtual_l) + F_gravity
+            F_r = kp_h * (L_ref - self.L_virtual_r) + kd_h * (0 - self.DL_virtual_r) + F_gravity
+
+            # --- 雅可比转置映射 ---
+            # tau = J^T * [F, T_rot]^T
+
+            # 左腿
+            J_l = self.compute_virtual_jacobian(self.theta_bl_joint_pos, self.theta_kl)
+            traj_forces_l = np.array([F_l, T_virtual_rot_l])
+            joint_torques_l = J_l.T @ traj_forces_l
+
+            # 右腿
+            J_r = self.compute_virtual_jacobian(self.theta_br_joint_pos, self.theta_kr)
+            traj_forces_r = np.array([F_r, T_virtual_rot_r])
+            joint_torques_r = J_r.T @ traj_forces_r
+
+            # 赋值
+            self.cmd_wheel_torque_l = T_wheel_l
+            self.cmd_wheel_torque_r = T_wheel_r
+
+            self.cmd_hip_torque_l = joint_torques_l[0]
+            self.cmd_knee_torque_l = joint_torques_l[1]
+
+            self.cmd_hip_torque_r = joint_torques_r[0]
+            self.cmd_knee_torque_r = joint_torques_r[1]
+
+            # 限幅
+            self.limit_torques()
+
         else:
-            # 备用PD控制器
             self.fallback_pd_control(state)
+
+    def limit_torques(self):
+        self.cmd_wheel_torque_l = np.clip(self.cmd_wheel_torque_l, -self.max_torque, self.max_torque)
+        self.cmd_wheel_torque_r = np.clip(self.cmd_wheel_torque_r, -self.max_torque, self.max_torque)
+        self.cmd_hip_torque_l   = np.clip(self.cmd_hip_torque_l,   -self.max_torque, self.max_torque)
+        self.cmd_hip_torque_r   = np.clip(self.cmd_hip_torque_r,   -self.max_torque, self.max_torque)
+        self.cmd_knee_torque_l  = np.clip(self.cmd_knee_torque_l,  -self.max_torque, self.max_torque)
+        self.cmd_knee_torque_r  = np.clip(self.cmd_knee_torque_r,  -self.max_torque, self.max_torque)
+
 
     def fallback_pd_control(self, state):
         """备用PD控制器 (当LQR不可用时)"""
-        # 平衡控制 (俯仰)
-        kp_pitch = 60.0
-        kd_pitch = 12.0
-        pitch_torque = -(kp_pitch * state[4] + kd_pitch * state[5])
+        # 简单解耦PD
 
-        # 高度控制
-        kp_height = 120.0
-        kd_height = 25.0
-        height_torque = -(kp_height * state[2] + kd_height * state[3])
+        # 1. 俯仰平衡 (主要靠轮子力矩)
+        pitch_err = state[4]
+        pitch_vel = state[5]
+        T_bal = -(15.0 * pitch_err + 3.0 * pitch_vel)
 
-        # 速度控制
-        kp_vel = 8.0
-        wheel_velocity = kp_vel * state[1]
+        # 2. 偏航控制 (轮子差速)
+        yaw_err = state[6]
+        yaw_vel = state[7]
+        T_yaw = -(5.0 * yaw_err + 1.0 * yaw_vel)
 
-        # 偏航控制
-        kp_yaw = 15.0
-        kd_yaw = 3.0
-        yaw_velocity = -(kp_yaw * state[6] + kd_yaw * state[7])
+        # 3. 高度控制 (靠腿部推力) - 极其简化
+        h_err = state[2]
+        h_vel = state[3]
+        F_h = -(100.0 * h_err + 10.0 * h_vel)
+        # 简单的力分配: 假设力均匀分配给髋和膝 (实际需要雅可比)
+        T_leg = F_h * 0.1
 
-        # 分配控制量
-        self.left_wheel_velocity = wheel_velocity - yaw_velocity
-        self.right_wheel_velocity = wheel_velocity + yaw_velocity
-        self.left_hip_torque = pitch_torque + height_torque
-        self.right_hip_torque = pitch_torque + height_torque
-        self.left_knee_torque = -height_torque
-        self.right_knee_torque = -height_torque
+        self.cmd_wheel_torque_l = T_bal - T_yaw
+        self.cmd_wheel_torque_r = T_bal + T_yaw
+
+        self.cmd_hip_torque_l = T_leg
+        self.cmd_hip_torque_r = T_leg
+        self.cmd_knee_torque_l = T_leg
+        self.cmd_knee_torque_r = T_leg
 
     def control_loop(self):
         """主控制循环"""
         # 获取当前状态
         state = self.get_state_vector()
 
-        # LQR控制计算
+        # 计算控制量 (力矩)
         self.lqr_control(state)
 
-        # 发布控制命令
-        # 轮子使用速度控制
-        self.publish_joint_command(self.left_wheel_pub, self.left_wheel_velocity)
-        self.publish_joint_command(self.right_wheel_pub, self.right_wheel_velocity)
+        # 发布控制命令 (全部为力矩)
+        self.publish_joint_command(self.left_wheel_pub,  self.cmd_wheel_torque_l)
+        self.publish_joint_command(self.right_wheel_pub, self.cmd_wheel_torque_r)
 
-        # 关节使用力矩控制
-        self.publish_joint_command(self.left_hip_pub, self.left_hip_torque)
-        self.publish_joint_command(self.right_hip_pub, self.right_hip_torque)
-        self.publish_joint_command(self.left_knee_pub, self.left_knee_torque)
-        self.publish_joint_command(self.right_knee_pub, self.right_knee_torque)
+        self.publish_joint_command(self.left_hip_pub,    self.cmd_hip_torque_l)
+        self.publish_joint_command(self.right_hip_pub,   self.cmd_hip_torque_r)
+
+        self.publish_joint_command(self.left_knee_pub,   self.cmd_knee_torque_l)
+        self.publish_joint_command(self.right_knee_pub,  self.cmd_knee_torque_r)
 
         # 调试信息
-        if int(self.get_clock().now().nanoseconds / 1e9) % 5 == 0:
+        if int(self.get_clock().now().nanoseconds / 1e9) % 2 == 0: # 提高日志频率
             self.get_logger().info(
-                f"状态: pos={self.x_pos:.3f}, vel={self.x_vel:.3f}, "
-                f"height={self.height:.3f}, pitch={math.degrees(self.pitch):.2f}°, "
-                f"yaw={math.degrees(self.yaw):.2f}°"
-            )
-            self.get_logger().info(
-                f"控制: L_wheel={self.left_wheel_velocity:.2f}, R_wheel={self.right_wheel_velocity:.2f}, "
-                f"L_hip={self.left_hip_torque:.2f}, R_hip={self.right_hip_torque:.2f}"
+                f"Pitch: {math.degrees(self.pitch):.1f}deg | "
+                f"Torques(Nm) -> W_L:{self.cmd_wheel_torque_l:.2f} W_R:{self.cmd_wheel_torque_r:.2f} "
+                f"H_L:{self.cmd_hip_torque_l:.2f} K_L:{self.cmd_knee_torque_l:.2f}"
             )
 
     def publish_joint_command(self, publisher, value):
