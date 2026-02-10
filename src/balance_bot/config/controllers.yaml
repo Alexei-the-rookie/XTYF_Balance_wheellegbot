@@ -1,0 +1,62 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100  # Hz
+    use_sim_time: true
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    left_hip_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    left_knee_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    left_wheel_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    right_hip_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    right_knee_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+    right_wheel_joint_controller:
+      type: forward_command_controller/ForwardCommandController
+
+left_hip_joint_controller:
+  ros__parameters:
+    joints:
+      - left_hip_joint
+    interface_name: effort
+
+left_knee_joint_controller:
+  ros__parameters:
+    joints:
+      - left_knee_joint
+    interface_name: effort
+
+left_wheel_joint_controller:
+  ros__parameters:
+    joints:
+      - left_wheel_joint
+    interface_name: effort
+
+right_hip_joint_controller:
+  ros__parameters:
+    joints:
+      - right_hip_joint
+    interface_name: effort
+
+right_knee_joint_controller:
+  ros__parameters:
+    joints:
+      - right_knee_joint
+    interface_name: effort
+
+right_wheel_joint_controller:
+  ros__parameters:
+    joints:
+      - right_wheel_joint
+    interface_name: effort
+
