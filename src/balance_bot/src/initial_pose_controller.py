@@ -121,7 +121,7 @@ class PureLQRController(Node):
 
         # 控制限制
         self.max_wheel_velocity = 25.0   # 最大轮子速度 [rad/s]
-        self.max_torque = 30.0           # 最大关节力矩 [Nm]
+        self.max_torque = 60.0           # 最大关节力矩 [Nm]
 
         # 初始化LQR
         self.init_lqr()
@@ -243,31 +243,29 @@ class PureLQRController(Node):
                 if msg.effort and len(msg.effort) > idx:
                     self.tau_wheel_l = msg.effort[idx]
 
-            # 右腿 (镜像处理: 符号取反)
+            # 右腿 (镜像处理: 符号取反 -> 但URDF中axis一致，改为一致处理)
             if 'right_hip_joint' in name_map:
                 idx = name_map['right_hip_joint']
                 if msg.position and len(msg.position) > idx:
-                    # 假设右腿电机反装: 读数取反适配模型
-                    # 左腿: pos = raw + offset
-                    # 右腿: pos = offset - raw (若raw增加对应反向运动)
-                    self.theta_br_joint_pos = q_hip_offset - msg.position[idx]
+                    # URDF中左右腿定义完全一致(axis=0 1 0, origin相同)，仿真中不需要镜像处理
+                    self.theta_br_joint_pos = msg.position[idx] + q_hip_offset
                 if msg.velocity and len(msg.velocity) > idx:
-                    self.dtheta_br_joint_vel = -msg.velocity[idx] # 速度取反
+                    self.dtheta_br_joint_vel = msg.velocity[idx]
                 else:
                     self.dtheta_br_joint_vel = 0.0
                 if msg.effort and len(msg.effort) > idx:
-                    self.tau_hip_r = -msg.effort[idx]             # 力矩取反
+                    self.tau_hip_r = msg.effort[idx]
 
             if 'right_knee_joint' in name_map:
                 idx = name_map['right_knee_joint']
                 if msg.position and len(msg.position) > idx:
-                    self.theta_kr = q_knee_offset - msg.position[idx]       # 膝盖也镜像
+                    self.theta_kr = msg.position[idx] + q_knee_offset
                 if msg.velocity and len(msg.velocity) > idx:
-                    self.dtheta_kr = -msg.velocity[idx]
+                    self.dtheta_kr = msg.velocity[idx]
                 else:
                     self.dtheta_kr = 0.0
                 if msg.effort and len(msg.effort) > idx:
-                    self.tau_knee_r = -msg.effort[idx]
+                    self.tau_knee_r = msg.effort[idx]
 
             if 'right_wheel_joint' in name_map:
                 idx = name_map['right_wheel_joint']
@@ -622,8 +620,9 @@ class PureLQRController(Node):
             # 右腿因为输入状态读取时做了镜像(Offset - Raw)，
             # 对称动作需要产生对称的物理效果。
             # 如果左右电机安装镜像，则通常需要取反。
-            self.cmd_hip_torque_r = -joint_torques_r[0]
-            self.cmd_knee_torque_r = -joint_torques_r[1]
+            # 修正：URDF中左右腿一致，因此右腿力矩也不取反
+            self.cmd_hip_torque_r = joint_torques_r[0]
+            self.cmd_knee_torque_r = joint_torques_r[1]
 
             # 软启动逻辑
             if self.loop_count < self.soft_start_duration:
@@ -681,9 +680,9 @@ class PureLQRController(Node):
         self.cmd_wheel_torque_r = -(T_bal + T_yaw) # 右侧力矩取反
 
         self.cmd_hip_torque_l = T_leg
-        self.cmd_hip_torque_r = -T_leg         # 右侧力矩取反
+        self.cmd_hip_torque_r = T_leg
         self.cmd_knee_torque_l = T_leg
-        self.cmd_knee_torque_r = -T_leg        # 右侧力矩取反
+        self.cmd_knee_torque_r = T_leg
 
     def control_loop(self):
         """主控制循环"""
