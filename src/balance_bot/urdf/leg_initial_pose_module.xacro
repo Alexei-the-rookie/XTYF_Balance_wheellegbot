@@ -87,16 +87,9 @@
     <joint name="${prefix}_knee_joint" type="revolute">
       <parent link="${prefix}_thigh"/>
       <child link="${prefix}_shank"/>
-      <origin xyz="0 0 ${-thigh_length}" rpy="0 0 0"/>
+      <origin rpy="0 ${initial_knee_angle} 0" xyz="0 0 ${-thigh_length}"/>
       <axis xyz="0 1 0"/>
       <limit lower="0.0" upper="3.0" effort="25.0" velocity="10.0"/>
-      <!-- 设置初始位置 -->
-      <xacro:if value="${mirror}">
-        <origin rpy="0 ${initial_knee_angle} 0" xyz="0 0 ${-thigh_length}"/>
-      </xacro:if>
-      <xacro:unless value="${mirror}">
-        <origin rpy="0 ${initial_knee_angle} 0" xyz="0 0 ${-thigh_length}"/>
-      </xacro:unless>
     </joint>
 
     <!-- ========== 轮子 (Wheel) ========== -->

@@ -47,7 +47,7 @@ def generate_launch_description():
         arguments=[
             '-name', 'wheel_leg_robot',
             '-topic', 'robot_description',
-            '-x', '0.0', '-y', '0.0', '-z', '0.5'
+            '-x', '0.0', '-y', '0.0', '-z', '0.3'
         ]
     )
 

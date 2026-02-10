@@ -14,16 +14,16 @@ class PureLQRController(Node):
         super().__init__('pure_lqr_controller')
 
         # 状态变量 (10维状态向量)
-        self.theta_bl = 0.0                # 左侧腿角
-        self.dtheta_bl = 0.0            # 左侧腿角变化率
-        self.theta_br = 0.0              # 右侧腿角
-        self.dtheta_br = 0.0          # 右侧腿角变化率
-        self.theta_wl = 0.0          # 左腿与轮夹角
-        self.dtheta_wl = 0.0      # 左腿与轮夹角变化率
-        self.theta_wr = 0.0          # 右腿与轮夹角
-        self.dtheta_wr = 0.0      # 右腿角速度
+        self.theta_bl = 0.0          # 左侧虚拟腿角 (腿向量与机体垂直轴夹角)
+        self.dtheta_bl = 0.0         # 左侧虚拟腿角速度
+        self.theta_br = 0.0          # 右侧虚拟腿角
+        self.dtheta_br = 0.0         # 右侧虚拟腿角速度
+        self.theta_wl = 0.0          # 左轮电机角度 (位置/里程计)
+        self.dtheta_wl = 0.0         # 左轮角速度
+        self.theta_wr = 0.0          # 右轮电机角度 (位置/里程计)
+        self.dtheta_wr = 0.0         # 右轮角速度
         self.theta_b = 0.0           # 机体倾斜角 [rad]
-        self.dtheta_b = 0.0       # 机体倾斜角速度
+        self.dtheta_b = 0.0          # 机体倾斜角速度
 
         self.roll = 0.0           # 机体翻滚角
 
@@ -47,16 +47,32 @@ class PureLQRController(Node):
         self.acc_z = 0.0
 
         # 参考状态
-        self.theta_bl_ref = 0.0                # 左侧腿角
-        self.dtheta_bl_ref = 0.0            # 左侧腿角变化率
-        self.theta_br_ref = 0.0              # 右侧腿角
-        self.dtheta_br_ref = 0.0          # 右侧腿角变化率
-        self.theta_wl_ref = 0.0          # 左腿与轮夹角
-        self.dtheta_wl_ref = 0.0      # 左腿与轮夹角变化率
-        self.theta_wr_ref = 0.0          # 右腿与轮夹角
-        self.dtheta_wr_ref = 0.0      # 右腿角速度
-        self.theta_b_ref = 0.0           # 机体倾斜角 [rad]
-        self.dtheta_b_ref = 0.0       # 机体倾斜角速度
+        # 目标状态描述：全机器人重心位于两轮水平连线上（即水平投影重合，处于平衡位置），
+        # 且除了轮子没有其他部位触地，机器人机体俯仰保持水平。
+        # 对应状态向量为全零向量。
+
+        # [0-3] 虚拟腿角度 theta_bl/br:
+        # 定义为虚拟腿向量(髋->轮)在机体坐标系下与垂直轴(Z)的夹角。
+        # 当机体水平(Pitch=0)且重心平衡(腿垂直)时，该角度为 0。
+        # 注意：这**不是**物理髋关节角度(q_hip)。物理关节是弯曲的(-1.55rad)，但等效虚拟腿是垂直的。
+        self.theta_bl_ref = 0.0
+        self.dtheta_bl_ref = 0.0
+        self.theta_br_ref = 0.0
+        self.dtheta_br_ref = 0.0
+
+        # [4-7] 轮子角度 theta_wl/wr:
+        # 定义为轮子电机的累计转角(位置)。
+        # 设为 0 表示期望机器人保持在原地(里程计原点)。
+        self.theta_wl_ref = 0.0
+        self.dtheta_wl_ref = 0.0
+        self.theta_wr_ref = 0.0
+        self.dtheta_wr_ref = 0.0
+
+        # [8-9] 机体俯仰 theta_b:
+        # 定义为机体相对于世界坐标系水平面的夹角。
+        # 设为 0 表示期望机体保持水平。
+        self.theta_b_ref = 0.0
+        self.dtheta_b_ref = 0.0
 
         # LQR控制输入 (6维控制向量)
         self.T_lw_l = 0.0    # 左轮力矩 [Nm]
@@ -337,123 +353,45 @@ class PureLQRController(Node):
         A[6, 7] = 1.0
         A[8, 9] = 1.0
 
-        # --- 动力学参数 (近似) ---
-        # 1. 倒立摆 (WIP) 动力学 - 用于 [Th_b, Th_w]
-        # 假设左右对称，参数合并
-        M_b = self.m_b + 2 * self.m_l  # 上半身总质量近似
-        M_w = 2 * self.m_w             # 轮子总质量
-        I_b = self.I_b + 0.05          # 上半身转动惯量 (估算腿部贡献)
-        I_w = 2 * self.I_w             # 轮子总惯量
-        L = self.target_height + 0.05  # 质心高度 (髋高 + 质心偏置)
-        R = self.R_w
-        g = self.g
-
-        # 线性化方程求解:
-        # Eq1: (Mb*L^2 + Ib)*th_b_dd + Mb*L*R*th_w_dd = Mb*g*L*th_b
-        # Eq2: Mb*L*R*th_b_dd + (Mw*R^2 + Ib + Mb*R^2)*th_w_dd = 0 (忽略摩擦?)
-        # 更准确的Eq2 (牛顿-欧拉): (Mw + Mb)*R^2*th_w_dd + Mb*L*R*th_b_dd = T ...
-
-        # 系数矩阵 M_mat * [th_b_dd; th_w_dd] = K_mat * [th_b; th_w] + ...
-        m11 = M_b * L**2 + I_b
-        m12 = M_b * L * R
-        m21 = M_b * L * R
-        m22 = (M_w + M_b) * R**2 + I_w
-
-        det = m11 * m22 - m12 * m21
-
-        # A矩阵项: d(dtheta_b)/d(theta_b) 和 d(dtheta_w)/d(theta_b)
-        # 右边项 (Gravity term only for Eq1): [Mb*g*L; 0]
-        # inv(M) * [G; 0]
-        # th_b_dd = (m22 * Mb*g*L) / det * th_b
-        # th_w_dd = (-m21 * Mb*g*L) / det * th_b
-
-        a_thb_dd_thb = (m22 * M_b * g * L) / det
-        a_thw_dd_thb = (-m21 * M_b * g * L) / det
-
-        # 填充 A 矩阵 (WIP部分)
-        A[9, 8] = a_thb_dd_thb  # d(dth_b) / d(th_b)
-
-        # 轮子耦合 (左/右轮各承担一半效果)
-        A[5, 8] = a_thw_dd_thb  # d(dth_wl) / d(th_b)
-        A[7, 8] = a_thw_dd_thb  # d(dth_wr) / d(th_b)
-
-        # 2. 腿部摆动动力学 (近似为悬挂摆)
-        # I_l * th_l_dd + m_l * g * l_cm * th_l = T
-        # th_l_dd = -(m_l * g * l_cm / I_l) * th_l
-        gravity_stiffness_leg = -(self.m_l * g * self.l_com_to_hip) / (self.I_l + self.m_l * self.l_com_to_hip**2)
-
-        A[1, 0] = gravity_stiffness_leg
-        A[3, 2] = gravity_stiffness_leg
-
-        # 添加一些阻尼 (避免纯振荡)
-        damping = -0.1
-        A[1, 1] = damping
-        A[3, 3] = damping
-        A[5, 5] = -0.5 # 轮子摩擦
-        A[7, 7] = -0.5
-        A[9, 9] = -0.01 # 机体阻尼
+        A[1, 0] = 374.23
+        A[1, 2] = -43.45
+        A[3, 0] = -43.45
+        A[3, 2] = 374.23
+        A[5, 0] = -904.77
+        A[5, 2] = 23.86
+        A[7, 0] = 23.86
+        A[7, 2] = -904.77
+        A[9, 0] = -23.65
+        A[9, 2] = -23.65
+        A[9, 8] = 65.33
 
         return A
 
     def build_control_matrix(self):
         """构建控制矩阵 B (10x4) - 基于参数的动态计算"""
-        # U = [T_lw_l, T_lw_r, T_bl_l, T_bl_r]
+        # U = [T_bl_l, T_bl_r, T_lw_l, T_lw_r]
         B = np.zeros((10, 4))
 
-        # 复用 WIP 参数
-        M_b = self.m_b + 2 * self.m_l
-        M_w = 2 * self.m_w
-        I_b = self.I_b + 0.05
-        I_w = 2 * self.I_w
-        L = self.target_height + 0.05
-        R = self.R_w
-
-        m11 = M_b * L**2 + I_b
-        m12 = M_b * L * R
-        m21 = M_b * L * R
-        m22 = (M_w + M_b) * R**2 + I_w
-        det = m11 * m22 - m12 * m21
-
-        # 输入矩阵系数
-        # Eq1 RHS: - (T_l + T_r)  (轮子扭矩的反作用力作用于机体)
-        # Eq2 RHS: (T_l + T_r)    (轮子扭矩作用于轮子动力学)
-        # 注意: 这里简化处理，假设左右轮合计力矩 T = T_l + T_r
-
-        # th_b_dd = (1/det) * (m22 * (-1) - m12 * (1)) * T
-        #           = -(m22 + m12) / det * T
-        b_thb_dd_T = -(m22 + m12) / det
-
-        # th_w_dd = (1/det) * (-m21 * (-1) + m11 * (1)) * T
-        #           = (m21 + m11) / det * T
-        b_thw_dd_T = (m21 + m11) / det
-
-        # 1. 轮子力矩 T_lw (Cols 0, 1)
-        # 对机体 (th_b_dd)
-        B[9, 0] = b_thb_dd_T  # Left
-        B[9, 1] = b_thb_dd_T  # Right
-
-        # 对轮子 (th_w_dd) - 分配给各自的轮子
-        # 这里需要注意: 上面推导是针对整体的。
-        # 对单轮: 主要驱动该轮，但也通过机体耦合影响另一轮 (忽略耦合，简化为主对角)
-        # 采用总质量模型: 系数需要调整?
-        # 简单近似: 直接使用推导出的系数，认为单边力矩产生一半的整体加速度 -> 近似正确
-        B[5, 0] = b_thw_dd_T
-        B[7, 1] = b_thw_dd_T
-
-        # 2. 髋关节虚拟力矩 T_bl (Cols 2, 3)
-        # 用于控制腿部角度 theta_bl/br
-        # approximate: I_leg * th_leg_dd = T_leg
-        I_leg_virtual = self.I_l + self.m_l * self.l_com_to_hip**2
-        inv_I_leg = 1.0 / I_leg_virtual
-
-        B[1, 2] = inv_I_leg   # Left Leg Accel
-        B[3, 3] = inv_I_leg   # Right Leg Accel
-
-        # 髋关节力矩对机体也有反作用力 (Yaw/Pitch)，这里忽略或添加微小耦合
-        # T_leg 作用于髋，反作用于机体 Pitch
-        # Eq: I_b * th_b_dd = -T_leg
-        B[9, 2] = -1.0 / I_b
-        B[9, 3] = -1.0 / I_b
+        B[1, 0] = 22.83
+        B[1, 1] = -2.65
+        B[1, 2] = 178.30
+        B[1, 3] = -83.92
+        B[3, 0] = -2.65
+        B[3, 1] = 22.83
+        B[3, 2] = -83.92
+        B[3, 3] = 178.30
+        B[5, 0] = -55.21
+        B[5, 1] = 1.46
+        B[5, 2] = -270.00
+        B[5, 3] = 46.09
+        B[7, 0] = 1.46
+        B[7, 1] = -55.21
+        B[7, 2] = 46.09
+        B[7, 3] = -270.00
+        B[9, 0] = -10.33
+        B[9, 1] = -10.33
+        B[9, 2] = -12.06
+        B[9, 3] = -12.06
 
         return B
 
@@ -509,6 +447,21 @@ class PureLQRController(Node):
             self.dtheta_wr,     # [7] 右轮角速度
             self.theta_b,       # [8] 机体俯仰角 (theta_b)
             self.dtheta_b       # [9] 机体俯仰角速度
+        ])
+
+    def get_ref_state_vector(self):
+        """获取参考状态向量 (10维)"""
+        return np.array([
+            self.theta_bl_ref,
+            self.dtheta_bl_ref,
+            self.theta_br_ref,
+            self.dtheta_br_ref,
+            self.theta_wl_ref,
+            self.dtheta_wl_ref,
+            self.theta_wr_ref,
+            self.dtheta_wr_ref,
+            self.theta_b_ref,
+            self.dtheta_b_ref
         ])
 
     def update_virtual_leg_states(self):
@@ -581,9 +534,9 @@ class PureLQRController(Node):
 
         # theta = atan2(-x, -z)
         # dtheta/dq = (-(dz/dq)*(-x) - (-dx/dq)*(-z)) / L^2
-        #           = (x*dz/dq - z*dx/dq) / L^2
-        dthdq1 = (x * dzdq1 - z * dxdq1) / L2
-        dthdq2 = (x * dzdq2 - z * dxdq2) / L2
+        #           = (z*dx/dq - x*dz/dq) / L^2
+        dthdq1 = (z * dxdq1 - x * dzdq1) / L2
+        dthdq2 = (z * dxdq2 - x * dzdq2) / L2
 
         return np.array([
             [dLdq1, dLdq2],
@@ -593,13 +546,17 @@ class PureLQRController(Node):
     def lqr_control(self, state):
         """纯LQR控制计算 + 虚拟力转换"""
         if self.K is not None:
-            # u = -K * x (4x1)
-            u = -self.K @ state
+            # 计算状态误差
+            ref_state = self.get_ref_state_vector()
+            state_error = state - ref_state
 
-            T_wheel_l = u[0]
-            T_wheel_r = u[1]
-            T_virtual_rot_l = u[2]
-            T_virtual_rot_r = u[3]
+            # u = -K * error (4x1)
+            u = -self.K @ state_error
+
+            T_wheel_l = u[2]
+            T_wheel_r = u[3]
+            T_virtual_rot_l = u[0]
+            T_virtual_rot_r = u[1]
 
             # --- 高度控制 (独立于LQR) ---
             # 施加沿虚拟腿方向的力 F
@@ -624,9 +581,6 @@ class PureLQRController(Node):
 
             # 计算PD力 (每条腿独立的高度维持 + Roll 调整)
             # 注意：这里的 F 是沿虚拟杆向外的推力
-            # 修正符号：
-            # 如果 Roll > 0 (左高右低)，F_roll > 0。
-            # 我们需要 F_r 变大 (推起右边)，F_l 变小。
             F_pd_l = kp_h * (L_ref - self.L_virtual_l) + kd_h * (0 - self.DL_virtual_l) - F_roll
             F_pd_r = kp_h * (L_ref - self.L_virtual_r) + kd_h * (0 - self.DL_virtual_r) + F_roll
 
@@ -641,37 +595,35 @@ class PureLQRController(Node):
 
             # --- 雅可比转置映射 ---
             # tau = J^T * [F, T_rot]^T
-
-            # 关键修正：F 的符号
-            # 全局 torque_sign_fix = -1.0 会翻转所有力矩。
-            # 为了让 F 表现为推力，我们需要在这里传入 -F。
-            # 这样最终输出 = -1.0 * J.T @ [-F, T] = J.T @ [F, -T]
-            # F 就会变成正向推力，而 T 保持被翻转 (以匹配 LQR 的需要)
+            # 这里使用标准的映射关系：
+            # F 是沿虚拟腿向外的推力，T_rot 是让虚拟腿旋转的力矩
 
             # 左腿
             J_l = self.compute_virtual_jacobian(self.theta_bl_joint_pos, self.theta_kl)
-            traj_forces_l = np.array([-F_l, T_virtual_rot_l])
+            traj_forces_l = np.array([F_l, T_virtual_rot_l])
             joint_torques_l = J_l.T @ traj_forces_l
 
             # 右腿
             J_r = self.compute_virtual_jacobian(self.theta_br_joint_pos, self.theta_kr)
-            traj_forces_r = np.array([-F_r, T_virtual_rot_r])
+            traj_forces_r = np.array([F_r, T_virtual_rot_r])
             joint_torques_r = J_r.T @ traj_forces_r
 
-            # 赋值 (右侧需要取反，因为输入状态取反了)
-            # 反转所有腿部力矩方向以解决 "Split" (劈叉) 问题
-            # 经过分析，控制器输出负力矩导致负向发散，因此需要反向推
-            torque_sign_fix = -1.0 # 尝试全局反转腿部力矩
-
+            # 输出力矩
+            # 轮子力矩直接赋值
             self.cmd_wheel_torque_l = T_wheel_l
             self.cmd_wheel_torque_r = -T_wheel_r
 
-            self.cmd_hip_torque_l = joint_torques_l[0] * torque_sign_fix
-            self.cmd_knee_torque_l = joint_torques_l[1] * torque_sign_fix
+            # 关节力矩
+            # 正常情况下 tau = J.T * F 即可
+            # 除非电机安装方向与模型定义相反，否则不需要 torque_sign_fix
+            self.cmd_hip_torque_l = joint_torques_l[0]
+            self.cmd_knee_torque_l = joint_torques_l[1]
 
-            # 右腿因为输入已经镜像过一次, 输出通常取反。这里再叠加 fix。
-            self.cmd_hip_torque_r = -joint_torques_r[0] * torque_sign_fix
-            self.cmd_knee_torque_r = -joint_torques_r[1] * torque_sign_fix
+            # 右腿因为输入状态读取时做了镜像(Offset - Raw)，
+            # 对称动作需要产生对称的物理效果。
+            # 如果左右电机安装镜像，则通常需要取反。
+            self.cmd_hip_torque_r = -joint_torques_r[0]
+            self.cmd_knee_torque_r = -joint_torques_r[1]
 
             # 软启动逻辑
             if self.loop_count < self.soft_start_duration:
