@@ -104,8 +104,8 @@ class PureLQRController(Node):
         self.dtheta_kr = 0.0
 
         # 控制限制
-        self.max_wheel_velocity = 10.0   # 最大轮子速度 [rad/s]
-        self.max_torque = 15.0           # 最大关节力矩 [Nm]
+        self.max_wheel_velocity = 25.0   # 最大轮子速度 [rad/s]
+        self.max_torque = 30.0           # 最大关节力矩 [Nm]
 
         # 初始化LQR
         self.init_lqr()
@@ -149,6 +149,10 @@ class PureLQRController(Node):
         # 控制定时器
         self.control_timer = self.create_timer(0.02, self.control_loop)  # 50Hz控制频率
 
+        # 控制循环计数器，用于软启动
+        self.loop_count = 0
+        self.soft_start_duration = 50  # 约1秒 (50Hz * 1)
+
         self.get_logger().info("纯LQR轮腿机器人控制器已启动")
 
     def cmd_vel_callback(self, msg):
@@ -159,46 +163,106 @@ class PureLQRController(Node):
     def joint_state_callback(self, msg):
         """处理关节状态数据"""
         try:
-            # 建立映射以应对不同的joint顺序
+            # 检查数据有效性
+            if not msg.name:
+                return
+
+            # 建立映射
             name_map = {name: i for i, name in enumerate(msg.name)}
+
+            # DEBUG: Print raw positions periodically
+            ts = self.get_clock().now().nanoseconds / 1e9
+            if int(ts * 10) % 20 == 0: # Print every 2 seconds roughly
+                 hl_idx = name_map.get('left_hip_joint')
+                 hr_idx = name_map.get('right_hip_joint')
+                 if hl_idx is not None and hr_idx is not None:
+                     raw_hl = msg.position[hl_idx]
+                     raw_hr = msg.position[hr_idx]
+                     self.get_logger().info(f"DEBUG: Raw Hip Pos -> L: {raw_hl:.3f}, R: {raw_hr:.3f}")
+
+            # URDF中设定了初始关节偏移 (Hip: -1.55, Knee: 2.48)
+            # 这意味着当传感器读数为0时，实际物理角度已处于初始姿态
+            # 控制器运动学模型假设 0 = 垂直/伸直
+            # 因此需加上偏移量还原真实物理角度
+            q_hip_offset = -1.55
+            q_knee_offset = 2.48
+
+            # 辅助函数：安全获取数据
+            def get_val(arr, idx, default=0.0):
+                if arr and len(arr) > idx:
+                    return arr[idx]
+                return default
 
             # 左腿
             if 'left_hip_joint' in name_map:
                 idx = name_map['left_hip_joint']
-                if len(msg.position) > idx: self.theta_bl_joint_pos = msg.position[idx]
-                if len(msg.velocity) > idx: self.dtheta_bl_joint_vel = msg.velocity[idx]
-                if len(msg.effort) > idx:   self.tau_hip_l = msg.effort[idx]
+                if msg.position and len(msg.position) > idx:
+                    self.theta_bl_joint_pos = msg.position[idx] + q_hip_offset
+                if msg.velocity and len(msg.velocity) > idx:
+                    self.dtheta_bl_joint_vel = msg.velocity[idx]
+                else:
+                    self.dtheta_bl_joint_vel = 0.0
+                if msg.effort and len(msg.effort) > idx:
+                    self.tau_hip_l = msg.effort[idx]
 
             if 'left_knee_joint' in name_map:
                 idx = name_map['left_knee_joint']
-                if len(msg.position) > idx: self.theta_kl = msg.position[idx]
-                if len(msg.velocity) > idx: self.dtheta_kl = msg.velocity[idx]
-                if len(msg.effort) > idx:   self.tau_knee_l = msg.effort[idx]
+                if msg.position and len(msg.position) > idx:
+                    self.theta_kl = msg.position[idx] + q_knee_offset
+                if msg.velocity and len(msg.velocity) > idx:
+                    self.dtheta_kl = msg.velocity[idx]
+                else:
+                    self.dtheta_kl = 0.0
+                if msg.effort and len(msg.effort) > idx:
+                    self.tau_knee_l = msg.effort[idx]
 
             if 'left_wheel_joint' in name_map:
                 idx = name_map['left_wheel_joint']
-                if len(msg.position) > idx: self.theta_wl = msg.position[idx]
-                if len(msg.velocity) > idx: self.dtheta_wl = msg.velocity[idx]
-                if len(msg.effort) > idx:   self.tau_wheel_l = msg.effort[idx]
+                if msg.position and len(msg.position) > idx:
+                    self.theta_wl = msg.position[idx]
+                if msg.velocity and len(msg.velocity) > idx:
+                    self.dtheta_wl = msg.velocity[idx]
+                else:
+                    self.dtheta_wl = 0.0
+                if msg.effort and len(msg.effort) > idx:
+                    self.tau_wheel_l = msg.effort[idx]
 
-            # 右腿
+            # 右腿 (镜像处理: 符号取反)
             if 'right_hip_joint' in name_map:
                 idx = name_map['right_hip_joint']
-                if len(msg.position) > idx: self.theta_br_joint_pos = msg.position[idx]
-                if len(msg.velocity) > idx: self.dtheta_br_joint_vel = msg.velocity[idx]
-                if len(msg.effort) > idx:   self.tau_hip_r = msg.effort[idx]
+                if msg.position and len(msg.position) > idx:
+                    # 假设右腿电机反装: 读数取反适配模型
+                    # 左腿: pos = raw + offset
+                    # 右腿: pos = offset - raw (若raw增加对应反向运动)
+                    self.theta_br_joint_pos = q_hip_offset - msg.position[idx]
+                if msg.velocity and len(msg.velocity) > idx:
+                    self.dtheta_br_joint_vel = -msg.velocity[idx] # 速度取反
+                else:
+                    self.dtheta_br_joint_vel = 0.0
+                if msg.effort and len(msg.effort) > idx:
+                    self.tau_hip_r = -msg.effort[idx]             # 力矩取反
 
             if 'right_knee_joint' in name_map:
                 idx = name_map['right_knee_joint']
-                if len(msg.position) > idx: self.theta_kr = msg.position[idx]
-                if len(msg.velocity) > idx: self.dtheta_kr = msg.velocity[idx]
-                if len(msg.effort) > idx:   self.tau_knee_r = msg.effort[idx]
+                if msg.position and len(msg.position) > idx:
+                    self.theta_kr = q_knee_offset - msg.position[idx]       # 膝盖也镜像
+                if msg.velocity and len(msg.velocity) > idx:
+                    self.dtheta_kr = -msg.velocity[idx]
+                else:
+                    self.dtheta_kr = 0.0
+                if msg.effort and len(msg.effort) > idx:
+                    self.tau_knee_r = -msg.effort[idx]
 
             if 'right_wheel_joint' in name_map:
                 idx = name_map['right_wheel_joint']
-                if len(msg.position) > idx: self.theta_wr = msg.position[idx]
-                if len(msg.velocity) > idx: self.dtheta_wr = msg.velocity[idx]
-                if len(msg.effort) > idx:   self.tau_wheel_r = msg.effort[idx]
+                if msg.position and len(msg.position) > idx:
+                    self.theta_wr = -msg.position[idx]            # 轮子也镜像
+                if msg.velocity and len(msg.velocity) > idx:
+                    self.dtheta_wr = -msg.velocity[idx]
+                else:
+                    self.dtheta_wr = 0.0
+                if msg.effort and len(msg.effort) > idx:
+                    self.tau_wheel_r = -msg.effort[idx]
 
         except Exception as e:
             self.get_logger().error(f"Joint State Parse Error: {e}")
@@ -225,18 +289,18 @@ class PureLQRController(Node):
 
         # 1. 状态权重矩阵 Q (10x10)
         q_diag = [
-            10.0, 1.0,    # 左腿虚拟角
-            10.0, 1.0,    # 右腿虚拟角
-            1.0,  0.5,    # 左轮
-            1.0,  0.5,    # 右轮
-            100.0, 10.0   # 机体俯仰 (平衡最重要)
+            1.0, 0.1,     # 左腿虚拟角 (降低权重，避免这里过度反应)
+            1.0, 0.1,     # 右腿虚拟角
+            0.1, 0.01,    # 左轮位置 (不太关心绝对位移)
+            0.1, 0.01,    # 右轮位置
+            10.0, 1.0     # 机体俯仰 (平衡最重要, 相对提高)
         ]
         self.Q = np.diag(q_diag)
 
         # 2. 控制权重矩阵 R (4x4)
         self.R = np.diag([
-            5.0, 5.0,     # 轮子力矩
-            3.0, 3.0      # 虚拟腿转动力矩
+            10.0, 10.0,   # 轮子力矩 (加大惩罚，省电/防止饱和)
+            10.0, 10.0    # 虚拟腿转动力矩
         ])
 
         # 3. 构建系统矩阵 A (10x10)
@@ -256,95 +320,140 @@ class PureLQRController(Node):
             self.K = None
 
     def build_system_matrix(self):
-        """构建系统矩阵 A (10x10)"""
-        # 简化模型：双轮倒立摆 + 腿部摆动
+        """构建系统矩阵 A (10x10) - 基于参数的动态计算"""
         A = np.zeros((10, 10))
 
-        # 运动学关系: angle_dot = angle_velocity
-        A[0, 1] = 1.0  # d(theta_bl) = dtheta_bl
-        A[2, 3] = 1.0  # d(theta_br) = dtheta_br
-        A[4, 5] = 1.0  # d(theta_wl) = dtheta_wl
-        A[6, 7] = 1.0  # d(theta_wr) = dtheta_wr
-        A[8, 9] = 1.0  # d(theta_b)  = dtheta_b
+        # --- 状态定义回顾 ---
+        # 0: th_bl, 1: dth_bl (左腿)
+        # 2: th_br, 3: dth_br (右腿)
+        # 4: th_wl, 5: dth_wl (左轮)
+        # 6: th_wr, 7: dth_wr (右轮)
+        # 8: th_b,  9: dth_b  (机体)
 
-        A[1, 0] = 374.21  # d(dtheta_bl) ~ theta_bl (腿部摆动动力学)
-        A[1, 2] = -43.45
-        A[3, 0] = -43.45  # d(dtheta_br) ~ theta_bl, theta_br (腿部摆动动力学)
-        A[3, 2] = 374.21
-        A[5, 0] = -904.77 # d(dtheta_wl) ~ theta_bl (轮子动力学)
-        A[5, 2] = 23.86
-        A[7, 0] = 23.86   # d(dtheta_wr) ~ theta_bl (轮子动力学)
-        A[7, 2] = -904.77
-        A[9, 0] = -23.65  # d(dtheta_b) ~ theta_bl (机体俯仰动力学)
-        A[9, 2] = -23.65  # d(dtheta_b) ~ theta_br (机体俯仰动力学)
-        A[9, 8] = 65.33   # d(dtheta_b) ~ theta_b (机体俯仰动力学)
-        # 动力学近似
-        # 这是一个高度简化的线性化模型，用于LQR求解
-        # 实际上应该基于更精确的动力学方程
+        # 运动学关系: d(pos) = vel
+        A[0, 1] = 1.0
+        A[2, 3] = 1.0
+        A[4, 5] = 1.0
+        A[6, 7] = 1.0
+        A[8, 9] = 1.0
 
-        # 机体俯仰动力学 (倒立摆)
-        # d(dtheta_b) ~ g/L * theta_b
-        #gravity_term = self.g / self.target_height # 使用目标高度作为倒立摆长度估计
-        #A[9, 8] = gravity_term
+        # --- 动力学参数 (近似) ---
+        # 1. 倒立摆 (WIP) 动力学 - 用于 [Th_b, Th_w]
+        # 假设左右对称，参数合并
+        M_b = self.m_b + 2 * self.m_l  # 上半身总质量近似
+        M_w = 2 * self.m_w             # 轮子总质量
+        I_b = self.I_b + 0.05          # 上半身转动惯量 (估算腿部贡献)
+        I_w = 2 * self.I_w             # 轮子总惯量
+        L = self.target_height + 0.05  # 质心高度 (髋高 + 质心偏置)
+        R = self.R_w
+        g = self.g
 
-        # 腿部摆动动力学 (复摆)
-        # d(dtheta_leg) ~ -g/L_leg * theta_leg
-        # 使用腿部质心距离
-        #leg_swing_term = -self.g / self.l_com_to_hip
-        #A[1, 0] = leg_swing_term
-        #A[3, 2] = leg_swing_term
+        # 线性化方程求解:
+        # Eq1: (Mb*L^2 + Ib)*th_b_dd + Mb*L*R*th_w_dd = Mb*g*L*th_b
+        # Eq2: Mb*L*R*th_b_dd + (Mw*R^2 + Ib + Mb*R^2)*th_w_dd = 0 (忽略摩擦?)
+        # 更准确的Eq2 (牛顿-欧拉): (Mw + Mb)*R^2*th_w_dd + Mb*L*R*th_b_dd = T ...
+
+        # 系数矩阵 M_mat * [th_b_dd; th_w_dd] = K_mat * [th_b; th_w] + ...
+        m11 = M_b * L**2 + I_b
+        m12 = M_b * L * R
+        m21 = M_b * L * R
+        m22 = (M_w + M_b) * R**2 + I_w
+
+        det = m11 * m22 - m12 * m21
+
+        # A矩阵项: d(dtheta_b)/d(theta_b) 和 d(dtheta_w)/d(theta_b)
+        # 右边项 (Gravity term only for Eq1): [Mb*g*L; 0]
+        # inv(M) * [G; 0]
+        # th_b_dd = (m22 * Mb*g*L) / det * th_b
+        # th_w_dd = (-m21 * Mb*g*L) / det * th_b
+
+        a_thb_dd_thb = (m22 * M_b * g * L) / det
+        a_thw_dd_thb = (-m21 * M_b * g * L) / det
+
+        # 填充 A 矩阵 (WIP部分)
+        A[9, 8] = a_thb_dd_thb  # d(dth_b) / d(th_b)
+
+        # 轮子耦合 (左/右轮各承担一半效果)
+        A[5, 8] = a_thw_dd_thb  # d(dth_wl) / d(th_b)
+        A[7, 8] = a_thw_dd_thb  # d(dth_wr) / d(th_b)
+
+        # 2. 腿部摆动动力学 (近似为悬挂摆)
+        # I_l * th_l_dd + m_l * g * l_cm * th_l = T
+        # th_l_dd = -(m_l * g * l_cm / I_l) * th_l
+        gravity_stiffness_leg = -(self.m_l * g * self.l_com_to_hip) / (self.I_l + self.m_l * self.l_com_to_hip**2)
+
+        A[1, 0] = gravity_stiffness_leg
+        A[3, 2] = gravity_stiffness_leg
+
+        # 添加一些阻尼 (避免纯振荡)
+        damping = -0.1
+        A[1, 1] = damping
+        A[3, 3] = damping
+        A[5, 5] = -0.5 # 轮子摩擦
+        A[7, 7] = -0.5
+        A[9, 9] = -0.01 # 机体阻尼
 
         return A
 
     def build_control_matrix(self):
-        """构建控制矩阵 B (10x4)"""
-        # 控制输入: [T_lw_l, T_lw_r, T_bl_l, T_bl_r]
-        # 状态: [th_bl, dth_bl, th_br, dth_br, th_wl, dth_wl, th_wr, dth_wr, th_b, dth_b]
-
+        """构建控制矩阵 B (10x4) - 基于参数的动态计算"""
+        # U = [T_lw_l, T_lw_r, T_bl_l, T_bl_r]
         B = np.zeros((10, 4))
 
-        B[1, 0] = 22.83   # d(dtheta_bl) ~ T_lw_l (轮子力矩对腿部加速的影响)
-        B[1, 1] = -2.65   # d(dtheta_bl) ~ T_lw_r
-        B[1, 2] = 178.30  # d(dtheta_bl) ~ T_bl_l (腿部虚拟转动力矩对腿部加速的影响)
-        B[1, 3] = -83.92  # d(dtheta_bl) ~ T_bl_r
-        B[3, 0] = -2.65   # d(dtheta_br) ~ T_lw_l
-        B[3, 1] = 22.83   # d(dtheta_br) ~ T_lw_r
-        B[3, 2] = -83.92  # d(dtheta_br) ~ T_bl_l
-        B[3, 3] = 178.30  # d(dtheta_br) ~ T_bl_r
-        B[5, 0] = -55.21  # d(dtheta_wl) ~ T_lw_l (轮子力矩对轮子加速的影响)
-        B[5, 1] = 1.46    # d(dtheta_wl) ~ T_lw_r
-        B[5, 2] = -270.00 # d(dtheta_wl) ~ T_bl_l (腿部虚拟转动力矩对轮子加速的影响)
-        B[5, 3] = 46.09   # d(dtheta_wl) ~ T_bl_r
-        B[7, 0] = 1.46    # d(dtheta_wr) ~ T_lw_l
-        B[7, 1] = -55.21  # d(dtheta_wr) ~ T_lw_r
-        B[7, 2] = 46.09   # d(dtheta_wr) ~ T_bl_l
-        B[7, 3] = -270.00 # d(dtheta_wr) ~ T_bl_r
-        B[9, 0] = -10.33  # d(dtheta_b) ~ T_lw_l (轮子力矩对机体俯仰加速的影响)
-        B[9, 1] = -10.33  # d(dtheta_b) ~ T_lw_r
-        B[9, 2] = -12.06  # d(dtheta_b) ~ T_bl_l (腿部虚拟转动力矩对机体俯仰加速的影响)
-        B[9, 3] = -12.06  # d(dtheta_b) ~ T_bl_r
+        # 复用 WIP 参数
+        M_b = self.m_b + 2 * self.m_l
+        M_w = 2 * self.m_w
+        I_b = self.I_b + 0.05
+        I_w = 2 * self.I_w
+        L = self.target_height + 0.05
+        R = self.R_w
 
-        # 惯量参数近似
-        #inv_I_w = 1.0 / self.I_w       # 轮子
-        #inv_I_b = 1.0 / self.I_b       # 机体
-        #inv_I_l = 1.0 / self.I_l       # 腿部
+        m11 = M_b * L**2 + I_b
+        m12 = M_b * L * R
+        m21 = M_b * L * R
+        m22 = (M_w + M_b) * R**2 + I_w
+        det = m11 * m22 - m12 * m21
 
-        # 1. 轮子力矩 T_lw (Left at col 0, Right at col 1)
-        # 对轮子加速
-        #B[5, 0] = inv_I_w
-        #B[7, 1] = inv_I_w
-        # 对机体产生反作用力 (导致俯仰)
-        #B[9, 0] = -inv_I_b
-        #B[9, 1] = -inv_I_b
+        # 输入矩阵系数
+        # Eq1 RHS: - (T_l + T_r)  (轮子扭矩的反作用力作用于机体)
+        # Eq2 RHS: (T_l + T_r)    (轮子扭矩作用于轮子动力学)
+        # 注意: 这里简化处理，假设左右轮合计力矩 T = T_l + T_r
 
-        # 2. 腿部虚拟力矩 T_bl (Left at col 2, Right at col 3)
-        # 对腿部加速 (注意方向定义)
-        # T_bl 是髋关节施加在虚拟杆上的力矩
-        #B[1, 2] = inv_I_l
-        #B[3, 3] = inv_I_l
-        # 对机体产生反作用力
-        #B[9, 2] = -inv_I_b
-        #B[9, 3] = -inv_I_b
+        # th_b_dd = (1/det) * (m22 * (-1) - m12 * (1)) * T
+        #           = -(m22 + m12) / det * T
+        b_thb_dd_T = -(m22 + m12) / det
+
+        # th_w_dd = (1/det) * (-m21 * (-1) + m11 * (1)) * T
+        #           = (m21 + m11) / det * T
+        b_thw_dd_T = (m21 + m11) / det
+
+        # 1. 轮子力矩 T_lw (Cols 0, 1)
+        # 对机体 (th_b_dd)
+        B[9, 0] = b_thb_dd_T  # Left
+        B[9, 1] = b_thb_dd_T  # Right
+
+        # 对轮子 (th_w_dd) - 分配给各自的轮子
+        # 这里需要注意: 上面推导是针对整体的。
+        # 对单轮: 主要驱动该轮，但也通过机体耦合影响另一轮 (忽略耦合，简化为主对角)
+        # 采用总质量模型: 系数需要调整?
+        # 简单近似: 直接使用推导出的系数，认为单边力矩产生一半的整体加速度 -> 近似正确
+        B[5, 0] = b_thw_dd_T
+        B[7, 1] = b_thw_dd_T
+
+        # 2. 髋关节虚拟力矩 T_bl (Cols 2, 3)
+        # 用于控制腿部角度 theta_bl/br
+        # approximate: I_leg * th_leg_dd = T_leg
+        I_leg_virtual = self.I_l + self.m_l * self.l_com_to_hip**2
+        inv_I_leg = 1.0 / I_leg_virtual
+
+        B[1, 2] = inv_I_leg   # Left Leg Accel
+        B[3, 3] = inv_I_leg   # Right Leg Accel
+
+        # 髋关节力矩对机体也有反作用力 (Yaw/Pitch)，这里忽略或添加微小耦合
+        # T_leg 作用于髋，反作用于机体 Pitch
+        # Eq: I_b * th_b_dd = -T_leg
+        B[9, 2] = -1.0 / I_b
+        B[9, 3] = -1.0 / I_b
 
         return B
 
@@ -497,36 +606,88 @@ class PureLQRController(Node):
             # 目标高度 (根据题目要求)
             L_ref = self.target_height
 
-            # 高度PD控制 + 重力补偿
-            kp_h = 1000.0
-            kd_h = 50.0
-            F_gravity = self.m_b * self.g / 2.0 / math.cos(self.theta_bl) # 简单分配
+            # 高度控制 + 重力补偿
+            kp_h = 2500.0  # 恢复高增益
+            kd_h = 80.0    # 恢复阻尼
 
-            F_l = kp_h * (L_ref - self.L_virtual_l) + kd_h * (0 - self.DL_virtual_l) + F_gravity
-            F_r = kp_h * (L_ref - self.L_virtual_r) + kd_h * (0 - self.DL_virtual_r) + F_gravity
+            # --- Roll 轴平衡控制 (新增) ---
+            # 如果机体 Roll > 0 (左倾/左低右高)，需要左腿多推，右腿少推
+            # 修正：根据IMU定义，Roll > 0 通常意味着右侧下沉（左侧抬高）。
+            # 此时需要右腿多推（增加支撑），左腿少推（减小支撑）以恢复水平。
+            kp_roll = 1000.0
+            kd_roll = 50.0
+
+            F_roll = kp_roll * self.roll + kd_roll * self.roll_vel
+
+            # 简单的重力前馈 (分配给两腿)
+            F_gravity = (self.m_b * self.g) / 2.0
+
+            # 计算PD力 (每条腿独立的高度维持 + Roll 调整)
+            # 注意：这里的 F 是沿虚拟杆向外的推力
+            # 修正符号：
+            # 如果 Roll > 0 (左高右低)，F_roll > 0。
+            # 我们需要 F_r 变大 (推起右边)，F_l 变小。
+            F_pd_l = kp_h * (L_ref - self.L_virtual_l) + kd_h * (0 - self.DL_virtual_l) - F_roll
+            F_pd_r = kp_h * (L_ref - self.L_virtual_r) + kd_h * (0 - self.DL_virtual_r) + F_roll
+
+            # 限制单腿最大出力 (防止数值爆炸，但要给够力)
+            F_max = 500.0
+            F_l = np.clip(F_pd_l + F_gravity, -F_max, F_max)
+            F_r = np.clip(F_pd_r + F_gravity, -F_max, F_max)
+
+            # Store for debug
+            self.debug_F_l = F_l
+            self.debug_F_r = F_r
 
             # --- 雅可比转置映射 ---
             # tau = J^T * [F, T_rot]^T
 
+            # 关键修正：F 的符号
+            # 全局 torque_sign_fix = -1.0 会翻转所有力矩。
+            # 为了让 F 表现为推力，我们需要在这里传入 -F。
+            # 这样最终输出 = -1.0 * J.T @ [-F, T] = J.T @ [F, -T]
+            # F 就会变成正向推力，而 T 保持被翻转 (以匹配 LQR 的需要)
+
             # 左腿
             J_l = self.compute_virtual_jacobian(self.theta_bl_joint_pos, self.theta_kl)
-            traj_forces_l = np.array([F_l, T_virtual_rot_l])
+            traj_forces_l = np.array([-F_l, T_virtual_rot_l])
             joint_torques_l = J_l.T @ traj_forces_l
 
             # 右腿
             J_r = self.compute_virtual_jacobian(self.theta_br_joint_pos, self.theta_kr)
-            traj_forces_r = np.array([F_r, T_virtual_rot_r])
+            traj_forces_r = np.array([-F_r, T_virtual_rot_r])
             joint_torques_r = J_r.T @ traj_forces_r
 
-            # 赋值
+            # 赋值 (右侧需要取反，因为输入状态取反了)
+            # 反转所有腿部力矩方向以解决 "Split" (劈叉) 问题
+            # 经过分析，控制器输出负力矩导致负向发散，因此需要反向推
+            torque_sign_fix = -1.0 # 尝试全局反转腿部力矩
+
             self.cmd_wheel_torque_l = T_wheel_l
-            self.cmd_wheel_torque_r = T_wheel_r
+            self.cmd_wheel_torque_r = -T_wheel_r
 
-            self.cmd_hip_torque_l = joint_torques_l[0]
-            self.cmd_knee_torque_l = joint_torques_l[1]
+            self.cmd_hip_torque_l = joint_torques_l[0] * torque_sign_fix
+            self.cmd_knee_torque_l = joint_torques_l[1] * torque_sign_fix
 
-            self.cmd_hip_torque_r = joint_torques_r[0]
-            self.cmd_knee_torque_r = joint_torques_r[1]
+            # 右腿因为输入已经镜像过一次, 输出通常取反。这里再叠加 fix。
+            self.cmd_hip_torque_r = -joint_torques_r[0] * torque_sign_fix
+            self.cmd_knee_torque_r = -joint_torques_r[1] * torque_sign_fix
+
+            # 软启动逻辑
+            if self.loop_count < self.soft_start_duration:
+                scale = self.loop_count / self.soft_start_duration
+                # 只对轮子进行软启动，防止飞车
+                self.cmd_wheel_torque_l *= scale
+                self.cmd_wheel_torque_r *= scale
+
+                # 腿部关节不再进行软启动！
+                # 必须立即输出全额力矩以抵抗重力，否则会直接趴下
+                # self.cmd_hip_torque_l *= scale
+                # self.cmd_hip_torque_r *= scale
+                # self.cmd_knee_torque_l *= scale
+                # self.cmd_knee_torque_r *= scale
+
+                self.loop_count += 1
 
             # 限幅
             self.limit_torques()
@@ -565,12 +726,12 @@ class PureLQRController(Node):
         T_leg = F_h * 0.1
 
         self.cmd_wheel_torque_l = T_bal - T_yaw
-        self.cmd_wheel_torque_r = T_bal + T_yaw
+        self.cmd_wheel_torque_r = -(T_bal + T_yaw) # 右侧力矩取反
 
         self.cmd_hip_torque_l = T_leg
-        self.cmd_hip_torque_r = T_leg
+        self.cmd_hip_torque_r = -T_leg         # 右侧力矩取反
         self.cmd_knee_torque_l = T_leg
-        self.cmd_knee_torque_r = T_leg
+        self.cmd_knee_torque_r = -T_leg        # 右侧力矩取反
 
     def control_loop(self):
         """主控制循环"""
@@ -616,3 +777,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
